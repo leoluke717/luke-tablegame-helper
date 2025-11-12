@@ -185,6 +185,7 @@ export default {
       players,
       currentPlayerId,
       currentPlayerName,
+      hostId,
       copyRoomId,
       endTurn,
       exitGame

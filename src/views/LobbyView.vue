@@ -362,6 +362,7 @@ export default {
       playerName,
       isHost,
       players,
+      hostId,
       qrCanvas,
       copyRoomId,
       startGame,
