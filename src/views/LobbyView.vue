@@ -392,17 +392,20 @@ export default {
       // 等待 Canvas 准备就绪（最多重试 10 次，防止无限循环）
       let retryCount = 0
       const maxRetries = 10
-      const waitForCanvas = () => {
-        if (isHost.value && qrCanvas.value) {
-          generateQRCode()
-        } else if (isHost.value && !qrCanvas.value && retryCount < maxRetries) {
+      const waitForCanvas = async () => {
+        // 只有房主才需要等待二维码
+        if (isHost.value && !qrCanvas.value && retryCount < maxRetries) {
           retryCount++
+          await nextTick() // 等待 DOM 更新
           setTimeout(waitForCanvas, 200)
+        } else if (isHost.value && qrCanvas.value) {
+          // Canvas 准备好且是房主，生成二维码
+          generateQRCode()
         }
       }
 
       // 开始等待
-      waitForCanvas()
+      await waitForCanvas()
     })
 
     onUnmounted(() => {
