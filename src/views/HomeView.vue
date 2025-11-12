@@ -80,7 +80,8 @@ export default {
       const roomFromQuery = route.query.room
       if (roomFromQuery) {
         console.log('🎯 检测到二维码扫描，自动加入房间:', roomFromQuery)
-        joinRoomId.value = roomFromQuery.toString().toUpperCase()
+        // 保持原始大小写，不转换
+        joinRoomId.value = roomFromQuery.toString()
         isAutoJoining.value = true
 
         // 等待DOM更新后显示对话框
@@ -179,9 +180,12 @@ export default {
       playerName.value = ''
       pendingRoomId.value = ''
 
-      // 如果是自动扫码加入，返回首页
+      // 如果是自动扫码加入，返回首页并清理URL参数
       if (isAutoJoining.value) {
-        router.push('/')
+        isAutoJoining.value = false
+        joinRoomId.value = ''
+        // 使用 replace 避免在历史记录中留下带参数的URL
+        router.replace('/')
       }
     }
 
@@ -189,7 +193,9 @@ export default {
     const handleCancel = () => {
       if (isAutoJoining.value) {
         // 如果是自动扫码进入，取消后返回首页并清理URL
-        router.push('/')
+        isAutoJoining.value = false
+        joinRoomId.value = ''
+        router.replace('/')
       } else {
         // 普通加入房间，关闭对话框
         showJoinDialog.value = false
