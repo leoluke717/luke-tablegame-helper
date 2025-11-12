@@ -157,6 +157,7 @@ export default {
       }
 
       try {
+        if (DEBUG) console.log('⏳ 生成二维码中...')
         await QRCode.toCanvas(qrCanvas.value, joinUrl, options)
         if (DEBUG) console.log('✅ 二维码生成成功')
       } catch (err) {
@@ -377,9 +378,13 @@ export default {
     }
 
     // 监听房主权限变化，自动生成二维码
-    watch(isHost, (newValue) => {
-      if (newValue && qrCanvas.value) {
-        generateQRCode()
+    watch(isHost, async (newValue) => {
+      if (newValue) {
+        // 等待 DOM 更新完成
+        await nextTick()
+        if (qrCanvas.value) {
+          generateQRCode()
+        }
       }
     })
 
