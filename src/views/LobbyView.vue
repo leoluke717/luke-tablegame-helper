@@ -74,6 +74,14 @@
         <p class="hint">或分享房间号：{{ roomId }}</p>
       </div>
 
+      <!-- 游戏选择区域 -->
+      <div class="game-selection">
+        <h3>🎯 当前游戏</h3>
+        <div class="game-display">
+          <span class="game-name">{{ displaySelectedGame }}</span>
+        </div>
+      </div>
+
       <!-- 玩家列表 -->
       <div class="players-section">
         <h3>👥 玩家列表 ({{ players.length }})</h3>
@@ -91,14 +99,20 @@
         </div>
       </div>
 
-      <!-- 开始游戏按钮（仅房主可见） -->
+      <!-- 游戏控制按钮（仅房主可见） -->
       <div v-if="isHost" class="actions">
+        <button
+          class="btn btn-secondary btn-settings"
+          @click="goToGameSettings"
+        >
+          ⚙️ 游戏设置
+        </button>
         <button
           class="btn btn-primary btn-start"
           @click="startGame"
           :disabled="players.length < 2"
         >
-          开始游戏
+          🎮 开始游戏
         </button>
         <div v-if="players.length < 2" class="hint">
           需要至少 2 名玩家才能开始游戏
@@ -119,7 +133,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { database } from '../firebase'
 import { ref as dbRef, onValue, set, update, remove } from 'firebase/database'
@@ -144,6 +158,8 @@ export default {
     const newPlayerName = ref('') // 新昵称输入
     const isNameValid = ref(false) // 昵称是否有效
     const nameValidationMsg = ref('') // 验证消息
+    const selectedGame = ref('piZheXianZhi') // 当前选择的游戏（默认"屁者先知"）
+    const isInitialized = ref(false) // 玩家是否已初始化完成
 
     let playersRef = null
     let unsubscribe = null
@@ -451,6 +467,12 @@ export default {
             // 房间已存在，有房主
             hostId.value = roomData.hostId
             checkIsHost()
+
+            // 只有在玩家初始化完成后，才更新游戏选择（避免初始化过程中的干扰）
+            if (isInitialized.value && roomData.selectedGame && roomData.selectedGame !== selectedGame.value) {
+              if (DEBUG) console.log('🔄 更新游戏选择:', roomData.selectedGame)
+              selectedGame.value = roomData.selectedGame
+            }
           } else if (roomData && !roomData.hostId) {
             // 房间存在但无房主（如数据未初始化），当前玩家成为房主
             if (!currentPlayerId.value) {
@@ -512,6 +534,10 @@ export default {
           unsubscribePlayers()
           unsubscribeRoom()
         }
+
+        // 标记为已初始化完成
+        isInitialized.value = true
+        if (DEBUG) console.log('✅ 玩家初始化完成')
       } catch (error) {
         if (DEBUG) console.error('初始化玩家失败:', error)
 
@@ -686,6 +712,19 @@ export default {
       }
     }
 
+    // 游戏显示名称计算属性
+    const displaySelectedGame = computed(() => {
+      const gameNames = {
+        'piZheXianZhi': '屁者先知'
+      }
+      return gameNames[selectedGame.value] || '未知游戏'
+    })
+
+    // 跳转到游戏设置页面
+    const goToGameSettings = () => {
+      router.push(`/game-settings/${roomId}`)
+    }
+
     // 监听房主权限变化，自动生成二维码
     watch(isHost, async (newValue) => {
       if (newValue) {
@@ -740,16 +779,20 @@ export default {
       newPlayerName,
       isNameValid,
       nameValidationMsg,
+      selectedGame,
+      displaySelectedGame,
       qrCanvas,
       copyRoomId,
       startGame,
       exitLobby,
+      goToGameSettings,
       changeAvatar,
       selectAvatar,
       validateName,
       saveName,
       cancelNameEdit,
-      AVATAR_EMOJIS
+      AVATAR_EMOJIS,
+      isInitialized
     }
   }
 }
@@ -858,6 +901,38 @@ export default {
   margin-top: 10px;
 }
 
+/* 游戏选择区域样式 */
+.game-selection {
+  background: #e3f2fd;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  text-align: center;
+  border: 2px solid #90caf9;
+}
+
+.game-selection h3 {
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.game-display {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-name {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #1976d2;
+  padding: 8px 20px;
+  background: white;
+  border-radius: 20px;
+  border: 2px solid #64b5f6;
+}
+
 .players-section h3 {
   color: #333;
   margin-bottom: 15px;
@@ -928,8 +1003,27 @@ export default {
   cursor: not-allowed;
 }
 
+.btn-secondary {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 2px solid #ddd;
+}
+
+.btn-secondary:hover {
+  background-color: #e0e0e0;
+  border-color: #ccc;
+}
+
+.actions .btn {
+  margin: 5px;
+}
+
 .btn-start {
   margin-bottom: 10px;
+}
+
+.btn-settings {
+  margin-right: 10px;
 }
 
 .waiting-status {
@@ -1026,6 +1120,21 @@ export default {
 
   .btn-change-name {
     margin-left: 6px;
+  }
+
+  /* 游戏选择区域移动端适配 */
+  .game-name {
+    font-size: 1.3em;
+    padding: 6px 16px;
+  }
+
+  .actions .btn {
+    width: 100%;
+    margin: 5px 0;
+  }
+
+  .btn-settings {
+    margin-right: 0;
   }
 }
 
