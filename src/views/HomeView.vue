@@ -24,9 +24,9 @@
           :disabled="isAutoJoining"
         />
         <div class="dialog-actions">
-          <button class="btn" @click="handleCancel">取消</button>
-          <button class="btn btn-primary" @click="joinRoom" :disabled="!joinRoomId.trim()">
-            加入
+          <button class="btn" @click="handleCancel" :disabled="isProcessing">取消</button>
+          <button class="btn btn-primary" @click="joinRoom" :disabled="!joinRoomId.trim() || isProcessing">
+            {{ isProcessing ? '处理中...' : '加入' }}
           </button>
         </div>
       </div>
@@ -71,6 +71,7 @@ export default {
     const showJoinDialog = ref(false)
     const joinRoomId = ref('')
     const isAutoJoining = ref(false) // 是否正在自动加入房间
+    const isProcessing = ref(false) // 是否正在处理加入房间请求
     const showNameDialog = ref(false) // 显示昵称输入对话框
     const playerName = ref('') // 临时存储待验证的昵称
     const pendingRoomId = ref('') // 待加入的房间号（用于对话框）
@@ -79,31 +80,28 @@ export default {
     const getBrowserId = () => {
       let browserId = localStorage.getItem('browserId')
       if (!browserId) {
-        // 生成基于浏览器特性的唯一ID
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        ctx.textBaseline = 'top'
-        ctx.font = '14px Arial'
-        ctx.fillText('Browser fingerprint', 2, 2)
-
+        // 生成基于浏览器特性的唯一ID（更稳定的方案）
+        // 只使用稳定且不易变化的特征
         const fingerprint = [
           navigator.userAgent,
           navigator.language,
-          screen.width + 'x' + screen.height,
-          new Date().getTimezoneOffset(),
-          canvas.toDataURL()
+          navigator.platform,
+          Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
+          // 避免使用屏幕分辨率和Canvas（容易变化）
+          // new Date().getTimezoneOffset() 也不稳定
         ].join('|')
 
-        // 简单哈希
-        let hash = 0
+        // 使用FNV-1a哈希算法
+        let hash = 2166136261
         for (let i = 0; i < fingerprint.length; i++) {
-          const char = fingerprint.charCodeAt(i)
-          hash = ((hash << 5) - hash) + char
-          hash = hash & hash // 转换为32位整数
+          hash ^= fingerprint.charCodeAt(i)
+          hash = (hash * 16777619) >>> 0  // FNV-1a算法
         }
 
-        browserId = 'browser_' + Math.abs(hash).toString(36)
+        // 生成稳定的浏览器ID（不使用时间戳）
+        browserId = 'browser_' + hash.toString(16)
         localStorage.setItem('browserId', browserId)
+        console.log('🆕 生成新的浏览器ID:', browserId, '特征:', fingerprint)
       }
       return browserId
     }
@@ -111,17 +109,22 @@ export default {
     // 检查房间内是否已存在当前浏览器玩家
     const checkExistingPlayer = async (roomId) => {
       try {
+        // 使用静态导入而不是动态导入
         const { getDatabase, ref, get } = await import('firebase/database')
         const database = getDatabase()
         const playersRef = ref(database, `rooms/${roomId}/players`)
         const snapshot = await get(playersRef)
 
+        const browserId = getBrowserId()
+        console.log('🔍 当前浏览器ID:', browserId)
+
         if (snapshot.exists()) {
           const players = snapshot.val()
-          const browserId = getBrowserId()
+          console.log('📋 房间内所有玩家ID:', Object.keys(players))
 
           // 遍历玩家列表查找匹配
           for (const playerId in players) {
+            console.log('🔎 比较:', playerId, '===', browserId, '?', playerId === browserId)
             if (playerId === browserId) {
               console.log('♻️ 找到现有玩家:', players[playerId].name)
               return {
@@ -131,12 +134,16 @@ export default {
               }
             }
           }
+        } else {
+          console.log('📭 房间内无玩家或房间不存在')
         }
 
+        console.log('❌ 未找到现有玩家')
         return { exists: false }
       } catch (error) {
         console.error('检查现有玩家失败:', error)
-        return { exists: false }
+        // 重新抛出错误，让调用者处理
+        throw new Error(`检查玩家失败: ${error.message}`)
       }
     }
 
@@ -188,11 +195,20 @@ export default {
     }
 
     const joinRoom = async () => {
+      // 防重复点击
+      if (isProcessing.value) {
+        console.log('⏳ 正在处理中，请勿重复点击')
+        return
+      }
+
+      isProcessing.value = true
+
       // 保持原始大小写，不要转换为大写
       const roomId = joinRoomId.value.trim()
 
       const roomValidationError = validateRoomId(roomId)
       if (roomValidationError) {
+        isProcessing.value = false
         if (isAutoJoining.value) {
           alert('房间号无效或已过期：' + roomValidationError)
           // 自动加入失败时返回首页
@@ -205,31 +221,45 @@ export default {
 
       // 检查房间内是否已存在当前浏览器玩家
       console.log('🔍 检查房间内是否已存在玩家...')
-      const existingPlayer = await checkExistingPlayer(roomId)
+      try {
+        const existingPlayer = await checkExistingPlayer(roomId)
 
-      if (existingPlayer.exists) {
-        // 玩家已存在，直接进入房间
-        console.log('✅ 玩家已存在，直接进入:', existingPlayer.playerName)
+        if (existingPlayer.exists) {
+          // 玩家已存在，直接进入房间
+          console.log('✅ 玩家已存在，直接进入:', existingPlayer.playerName)
 
-        // 保存玩家信息
-        localStorage.setItem('playerName', existingPlayer.playerName)
-        localStorage.setItem('playerId', existingPlayer.playerId)
-        localStorage.setItem('roomId', roomId)
+          // 保存玩家信息
+          localStorage.setItem('playerName', existingPlayer.playerName)
+          localStorage.setItem('playerId', existingPlayer.playerId)
+          localStorage.setItem('roomId', roomId)
 
-        // 关闭对话框并跳转
-        showJoinDialog.value = false
-        isAutoJoining.value = false
-        joinRoomId.value = ''
+          // 关闭对话框并跳转
+          showJoinDialog.value = false
+          isAutoJoining.value = false
+          joinRoomId.value = ''
+          isProcessing.value = false
 
-        // 跳转到房间大厅
-        router.push(`/lobby/${roomId}`)
-      } else {
-        // 玩家不存在，显示昵称输入对话框
-        console.log('🆕 玩家不存在，需要输入昵称')
-        pendingRoomId.value = roomId
-        playerName.value = ''
-        showNameDialog.value = true
-        showJoinDialog.value = false // 关闭房间号输入对话框
+          // 跳转到房间大厅
+          router.push(`/lobby/${roomId}`)
+        } else {
+          // 玩家不存在，显示昵称输入对话框
+          console.log('🆕 玩家不存在，需要输入昵称')
+          pendingRoomId.value = roomId
+          playerName.value = ''
+          showNameDialog.value = true
+          showJoinDialog.value = false // 关闭房间号输入对话框
+          isProcessing.value = false
+        }
+      } catch (error) {
+        console.error('加入房间失败:', error)
+        isProcessing.value = false
+        if (isAutoJoining.value) {
+          alert('检查房间失败：' + error.message + '，请稍后重试')
+          // 自动加入失败时返回首页
+          router.push('/')
+        } else {
+          alert('加入房间失败：' + error.message)
+        }
       }
     }
 
@@ -297,6 +327,7 @@ export default {
       showJoinDialog,
       joinRoomId,
       isAutoJoining,
+      isProcessing,
       showNameDialog,
       playerName,
       pendingRoomId,
