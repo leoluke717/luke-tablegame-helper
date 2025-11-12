@@ -19,11 +19,8 @@
       <!-- 邀请区域（仅房主可见） -->
       <div v-if="isHost" class="invite-section">
         <h3>📱 邀请玩家</h3>
-        <div class="qr-placeholder">
-          <div class="qr-code">
-            扫码加入房间<br>
-            <small>房间号：{{ roomId }}</small>
-          </div>
+        <div class="qr-code-container">
+          <canvas ref="qrCanvas" class="qr-canvas"></canvas>
         </div>
         <p class="hint">或分享房间号：{{ roomId }}</p>
       </div>
@@ -76,6 +73,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { database } from '../firebase'
 import { ref as dbRef, onValue, set, update, remove } from 'firebase/database'
+import QRCode from 'qrcode'
 
 export default {
   name: 'LobbyView',
@@ -87,9 +85,29 @@ export default {
     const playerName = ref('')
     const isHost = ref(false)
     const players = ref([])
+    const qrCanvas = ref(null)
 
     let playersRef = null
     let unsubscribe = null
+
+    // 生成二维码
+    const generateQRCode = async () => {
+      if (!qrCanvas.value || !isHost.value) return
+
+      const joinUrl = `${window.location.origin}/?room=${roomId}`
+      try {
+        await QRCode.toCanvas(qrCanvas.value, joinUrl, {
+          width: 200,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        })
+      } catch (err) {
+        console.error('二维码生成失败:', err)
+      }
+    }
 
     // 复制房间号
     const copyRoomId = async () => {
@@ -138,15 +156,21 @@ export default {
       })
     }
 
-    // 开始游戏（暂未实现）
-    const startGame = () => {
+    // 开始游戏
+    const startGame = async () => {
       if (players.value.length < 2) {
         alert('需要至少 2 名玩家才能开始游戏')
         return
       }
 
-      // TODO: 跳转到游戏页面
-      alert('游戏功能尚未实现，跳转到游戏页面...')
+      // 设置第一个玩家为当前回合
+      await update(dbRef(database, `rooms/${roomId}`), {
+        currentTurn: players.value[0].id,
+        gameStatus: 'playing'
+      })
+
+      // 跳转到游戏页面
+      router.push(`/game/${roomId}`)
     }
 
     // 退出房间
@@ -169,8 +193,12 @@ export default {
       }
     }
 
-    onMounted(() => {
-      initPlayer()
+    onMounted(async () => {
+      await initPlayer()
+      // 如果是房主，生成二维码
+      if (isHost.value) {
+        setTimeout(generateQRCode, 500) // 等待DOM更新
+      }
     })
 
     onUnmounted(() => {
@@ -274,24 +302,16 @@ export default {
   color: #333;
 }
 
-.qr-placeholder {
+.qr-code-container {
   display: flex;
   justify-content: center;
   margin: 20px 0;
 }
 
-.qr-code {
-  width: 200px;
-  height: 200px;
+.qr-canvas {
   background: white;
-  border: 3px dashed #42b983;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
   border-radius: 12px;
-  font-size: 1.1em;
-  color: #666;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .hint {
