@@ -12,14 +12,19 @@
     <div v-if="showJoinDialog" class="dialog-overlay" @click="showJoinDialog = false">
       <div class="dialog" @click.stop>
         <h2>加入房间</h2>
+        <div v-if="isAutoJoining" class="scan-hint">
+          <p>📱 扫描二维码进入房间</p>
+          <p class="room-id-display">房间号：<strong>{{ joinRoomId }}</strong></p>
+        </div>
         <input
           v-model="joinRoomId"
           placeholder="请输入房间号"
           class="input"
           @keyup.enter="joinRoom"
+          :disabled="isAutoJoining"
         />
         <div class="dialog-actions">
-          <button class="btn" @click="showJoinDialog = false">取消</button>
+          <button class="btn" @click="handleCancel">取消</button>
           <button class="btn btn-primary" @click="joinRoom" :disabled="!joinRoomId.trim()">
             加入
           </button>
@@ -30,15 +35,32 @@
 </template>
 
 <script>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 
 export default {
   name: 'HomeView',
   setup() {
     const router = useRouter()
+    const route = useRoute()
     const showJoinDialog = ref(false)
     const joinRoomId = ref('')
+    const isAutoJoining = ref(false) // 是否正在自动加入房间
+
+    // 自动检查URL参数中的room值（扫码进入）
+    onMounted(() => {
+      const roomFromQuery = route.query.room
+      if (roomFromQuery) {
+        console.log('🎯 检测到二维码扫描，自动加入房间:', roomFromQuery)
+        joinRoomId.value = roomFromQuery.toString().toUpperCase()
+        isAutoJoining.value = true
+
+        // 等待DOM更新后显示对话框
+        setTimeout(() => {
+          showJoinDialog.value = true
+        }, 100)
+      }
+    })
 
     // 输入验证函数
     const validatePlayerName = (name) => {
@@ -94,12 +116,24 @@ export default {
 
       const roomValidationError = validateRoomId(roomId)
       if (roomValidationError) {
-        alert(roomValidationError)
+        if (isAutoJoining.value) {
+          alert('房间号无效或已过期：' + roomValidationError)
+          // 自动加入失败时返回首页
+          router.push('/')
+        } else {
+          alert(roomValidationError)
+        }
         return
       }
 
       const playerName = prompt('请输入你的昵称：')
-      if (!playerName) return
+      if (!playerName) {
+        // 如果是自动扫码加入，用户取消输入，则返回首页
+        if (isAutoJoining.value) {
+          router.push('/')
+        }
+        return
+      }
 
       const nameValidationError = validatePlayerName(playerName)
       if (nameValidationError) {
@@ -119,11 +153,25 @@ export default {
       router.push(`/lobby/${roomId}`)
     }
 
+    // 处理取消按钮
+    const handleCancel = () => {
+      if (isAutoJoining.value) {
+        // 如果是自动扫码进入，取消后返回首页并清理URL
+        router.push('/')
+      } else {
+        // 普通加入房间，关闭对话框
+        showJoinDialog.value = false
+        joinRoomId.value = ''
+      }
+    }
+
     return {
       showJoinDialog,
       joinRoomId,
+      isAutoJoining,
       createRoom,
-      joinRoom
+      joinRoom,
+      handleCancel
     }
   }
 }
@@ -226,5 +274,25 @@ h1 {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+}
+
+.scan-hint {
+  background: #f0f8ff;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  border-left: 4px solid #42b983;
+}
+
+.scan-hint p {
+  margin: 5px 0;
+  color: #555;
+  font-size: 0.95em;
+}
+
+.room-id-display {
+  font-size: 1.1em;
+  font-weight: bold;
+  color: #42b983;
 }
 </style>
