@@ -40,10 +40,37 @@ export default {
     const showJoinDialog = ref(false)
     const joinRoomId = ref('')
 
+    // 输入验证函数
+    const validatePlayerName = (name) => {
+      if (!name || name.trim().length === 0) {
+        return '昵称不能为空'
+      }
+      if (name.trim().length < 2 || name.trim().length > 20) {
+        return '昵称长度应在2-20个字符之间'
+      }
+      if (!/^[\w\u4e00-\u9fa5]+$/.test(name.trim())) {
+        return '昵称只能包含字母、数字、下划线和中文'
+      }
+      return null
+    }
+
+    const validateRoomId = (roomId) => {
+      if (!roomId || roomId.trim().length === 0) {
+        return '房间号不能为空'
+      }
+      if (!/^[A-Z0-9-]+$/.test(roomId.trim())) {
+        return '房间号只能包含大写字母、数字和连字符'
+      }
+      return null
+    }
+
     const createRoom = () => {
       const playerName = prompt('请输入你的昵称：')
-      if (!playerName || !playerName.trim()) {
-        alert('请输入有效的昵称！')
+      if (!playerName) return
+
+      const validationError = validatePlayerName(playerName)
+      if (validationError) {
+        alert(validationError)
         return
       }
 
@@ -63,14 +90,20 @@ export default {
     }
 
     const joinRoom = () => {
-      if (!joinRoomId.value.trim()) {
-        alert('请输入房间号！')
+      const roomId = joinRoomId.value.trim().toUpperCase()
+
+      const roomValidationError = validateRoomId(roomId)
+      if (roomValidationError) {
+        alert(roomValidationError)
         return
       }
 
       const playerName = prompt('请输入你的昵称：')
-      if (!playerName || !playerName.trim()) {
-        alert('请输入有效的昵称！')
+      if (!playerName) return
+
+      const nameValidationError = validatePlayerName(playerName)
+      if (nameValidationError) {
+        alert(nameValidationError)
         return
       }
 
@@ -80,10 +113,10 @@ export default {
 
       // 将玩家信息存储到 localStorage
       localStorage.setItem('playerName', playerName.trim())
-      localStorage.setItem('roomId', joinRoomId.value.trim().toUpperCase())
+      localStorage.setItem('roomId', roomId)
 
       // 跳转到房间大厅
-      router.push(`/lobby/${joinRoomId.value.trim().toUpperCase()}`)
+      router.push(`/lobby/${roomId}`)
     }
 
     return {
