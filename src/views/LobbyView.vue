@@ -648,7 +648,7 @@ export default {
         newPlayerName.value = ''
         nameValidationMsg.value = ''
         isNameValid.value = false
-        alert('昵称修改成功！')
+        // 修改成功，无需提示
       }
     }
 
