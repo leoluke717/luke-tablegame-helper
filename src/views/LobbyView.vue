@@ -257,9 +257,34 @@ export default {
           console.log('🏠 房间监听器触发:', roomData ? '房间存在' : '房间不存在')
 
           if (roomData && roomData.hostId) {
-            // 房间已存在，更新房主ID并验证权限
+            // 房间已存在，有房主
             hostId.value = roomData.hostId
             checkIsHost()
+          } else if (roomData && !roomData.hostId) {
+            // 房间存在但无房主（如数据未初始化），当前玩家成为房主
+            if (!currentPlayerId.value) {
+              console.error('❌ 房间初始化失败：currentPlayerId 尚未设置')
+              return
+            }
+
+            console.log('✨ 房间无房主，当前玩家成为房主，ID:', currentPlayerId.value)
+
+            // 立即更新本地状态
+            hostId.value = currentPlayerId.value
+            checkIsHost()
+
+            try {
+              await retryOperation(() => update(roomRef, {
+                hostId: currentPlayerId.value,
+                createdAt: Date.now(),
+                gameStatus: 'waiting'
+              }))
+              console.log('✅ 房间房主设置成功，hostId:', currentPlayerId.value)
+            } catch (error) {
+              console.error('❌ 设置房主失败:', error)
+              hostId.value = null
+              checkIsHost()
+            }
           } else if (!roomData) {
             // 房间不存在，创建房间并设置房主
 
