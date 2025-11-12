@@ -819,7 +819,7 @@ export default {
 
 /* 头像样式 */
 .player-avatar {
-  font-size: 2em;
+  font-size: 1.8em;
   line-height: 1;
   margin-right: 8px;
   display: inline-flex;
@@ -832,19 +832,46 @@ export default {
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   flex-shrink: 0;
-}
-
-.player-name {
-  font-size: 1.1em;
-  color: #333;
+  /* 确保emoji在容器内居中 */
+  overflow: hidden;
+  text-align: center;
 }
 
 /* 当前玩家头像样式 */
 .player-name .player-avatar {
-  font-size: 2.5em;
+  font-size: 2.2em;
   width: 50px;
   height: 50px;
   margin-right: 12px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .player-avatar {
+    width: 34px;
+    height: 34px;
+    margin-right: 6px;
+    font-size: 1.5em;
+  }
+
+  .player-name .player-avatar {
+    width: 40px;
+    height: 40px;
+    margin-right: 10px;
+    font-size: 1.8em;
+  }
+
+  /* emoji按钮在移动端优化 */
+  .emoji-grid {
+    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    gap: 6px;
+    max-height: 250px;
+  }
+
+  .emoji-button {
+    font-size: 1.6em;
+    padding: 8px;
+  }
 }
 
 .btn-change-avatar {
