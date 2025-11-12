@@ -290,7 +290,9 @@ h1 {
   background: white;
   padding: 30px;
   border-radius: 12px;
-  min-width: 400px;
+  width: 90%;
+  max-width: 400px;
+  box-sizing: border-box;
 }
 
 .dialog h2 {
@@ -305,7 +307,7 @@ h1 {
   border: 2px solid #ddd;
   border-radius: 6px;
   margin-bottom: 20px;
-  text-transform: uppercase;
+  /* 移除text-transform，保留原始大小写 */
 }
 
 .input:focus {
