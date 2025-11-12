@@ -99,6 +99,36 @@ export default {
       if (DEBUG) console.log(...args)
     }
 
+    // 生成或获取浏览器唯一ID（与HomeView.vue保持一致）
+    const getBrowserId = () => {
+      let browserId = localStorage.getItem('browserId')
+      if (!browserId) {
+        // 生成基于浏览器特性的唯一ID（更稳定的方案）
+        // 只使用稳定且不易变化的特征
+        const fingerprint = [
+          navigator.userAgent,
+          navigator.language,
+          navigator.platform,
+          Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown',
+          // 避免使用屏幕分辨率和Canvas（容易变化）
+          // new Date().getTimezoneOffset() 也不稳定
+        ].join('|')
+
+        // 使用FNV-1a哈希算法
+        let hash = 2166136261
+        for (let i = 0; i < fingerprint.length; i++) {
+          hash ^= fingerprint.charCodeAt(i)
+          hash = (hash * 16777619) >>> 0  // FNV-1a算法
+        }
+
+        // 生成稳定的浏览器ID（不使用时间戳）
+        browserId = 'browser_' + hash.toString(16)
+        localStorage.setItem('browserId', browserId)
+        if (DEBUG) console.log('🆕 生成新的浏览器ID:', browserId, '特征:', fingerprint)
+      }
+      return browserId
+    }
+
     // Firebase操作重试机制
     const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
       let lastError
@@ -212,17 +242,43 @@ export default {
         const existingData = existingPlayerSnapshot.val()
         let currentPlayer = null
 
+        // 向后兼容性检查：如果localStorage中的playerId是旧格式（非browser_开头），
+        // 则使用浏览器ID重新生成，确保ID格式一致性
+        if (playerId && !playerId.startsWith('browser_')) {
+          if (DEBUG) console.log('🔄 检测到旧格式playerId，进行转换:', playerId)
+          playerId = null // 清除旧ID，强制使用浏览器ID
+        }
+
+        // 检查现有玩家列表中是否已存在使用当前浏览器ID的玩家
+        const browserId = getBrowserId()
+        let existingPlayerWithBrowserId = null
+
+        if (existingData) {
+          for (const [id, player] of Object.entries(existingData)) {
+            if (id === browserId) {
+              existingPlayerWithBrowserId = player
+              break
+            }
+          }
+        }
+
         // 如果玩家ID存在且在玩家列表中，则重用
         if (playerId && existingData && existingData[playerId]) {
           currentPlayer = existingData[playerId]
           console.log('♻️ 重用现有玩家身份:', currentPlayer.name)
           // 确保localStorage中的玩家ID是最新的
           localStorage.setItem('playerId', playerId)
+        } else if (existingPlayerWithBrowserId) {
+          // 向后兼容：如果房间中已存在使用当前浏览器ID的玩家，重用该玩家
+          currentPlayer = existingPlayerWithBrowserId
+          console.log('♻️ 向后兼容：重用现有浏览器玩家身份:', currentPlayer.name)
+          // 更新localStorage为浏览器ID
+          localStorage.setItem('playerId', browserId)
+          playerId = browserId
         } else {
-          // 创建新玩家（可能是首次加入或重新加入）
-          // 如果有旧的playerId但不在列表中，生成新的ID
-          const newPlayerId = Date.now().toString() + Math.random().toString(36).substring(7)
-          playerId = newPlayerId
+          // 创建新玩家
+          // 使用浏览器ID而不是随机生成，确保与HomeView.vue一致
+          playerId = browserId
 
           currentPlayer = {
             id: playerId,
