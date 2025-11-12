@@ -118,7 +118,19 @@ export default {
 
     // 检查是否为房主（通过比较玩家ID）
     const checkIsHost = () => {
-      isHost.value = currentPlayerId.value && hostId.value && currentPlayerId.value === hostId.value
+      console.log('🔍 检查房主权限:', {
+        currentPlayerId: currentPlayerId.value,
+        hostId: hostId.value,
+        playerName: playerName.value,
+        roomId: roomId
+      })
+
+      const result = currentPlayerId.value && hostId.value && currentPlayerId.value === hostId.value
+      isHost.value = result
+
+      if (DEBUG) {
+        console.log('✅ 房主权限检查结果:', result ? '✅ 是房主' : '❌ 不是房主')
+      }
     }
 
     // 生成二维码
@@ -202,6 +214,7 @@ export default {
         // 如果玩家ID存在且在玩家列表中，则重用
         if (playerId && existingData && existingData[playerId]) {
           currentPlayer = existingData[playerId]
+          console.log('♻️ 重用现有玩家:', currentPlayer)
         } else {
           // 创建新玩家
           playerId = Date.now().toString() + Math.random().toString(36).substring(7)
@@ -212,6 +225,8 @@ export default {
             joinedAt: Date.now()
           }
 
+          console.log('✨ 创建新玩家:', currentPlayer)
+
           // 写入 Firebase（使用重试机制）
           const newPlayerRef = dbRef(database, `rooms/${roomId}/players/${playerId}`)
           await retryOperation(() => set(newPlayerRef, currentPlayer))
@@ -220,8 +235,9 @@ export default {
           localStorage.setItem('playerId', playerId)
         }
 
-        // 保存当前玩家ID
-        currentPlayerId.value = currentPlayer.id
+        // 关键修复：提前设置 currentPlayerId，确保在注册监听器前已设置
+        currentPlayerId.value = playerId
+        console.log('✅ currentPlayerId 设置完成:', currentPlayerId.value)
 
         // 监听玩家列表变化
         const unsubscribePlayers = onValue(roomPlayersRef, (snapshot) => {
@@ -237,24 +253,37 @@ export default {
         roomRef = dbRef(database, `rooms/${roomId}`)
         const unsubscribeRoom = onValue(roomRef, async (snapshot) => {
           const roomData = snapshot.val()
+
+          console.log('🏠 房间监听器触发:', roomData ? '房间存在' : '房间不存在')
+
           if (roomData && roomData.hostId) {
             // 房间已存在，更新房主ID并验证权限
             hostId.value = roomData.hostId
             checkIsHost()
           } else if (!roomData) {
             // 房间不存在，创建房间并设置房主
+
+            // 关键修复：确保 currentPlayerId 已设置
+            if (!currentPlayerId.value) {
+              console.error('❌ 房间创建失败：currentPlayerId 尚未设置')
+              return
+            }
+
+            console.log('✨ 房间不存在，创建房间，房主ID:', currentPlayerId.value)
+
             // 立即更新本地状态，让用户立即看到房主标识
-            hostId.value = currentPlayer.id
+            hostId.value = currentPlayerId.value
             checkIsHost()
 
             try {
               await retryOperation(() => update(roomRef, {
-                hostId: currentPlayer.id,
+                hostId: currentPlayerId.value,
                 createdAt: Date.now(),
                 gameStatus: 'waiting'
               }))
+              console.log('✅ 房间创建成功，hostId:', currentPlayerId.value)
             } catch (error) {
-              if (DEBUG) console.error('创建房间失败:', error)
+              console.error('❌ 创建房间失败:', error)
               // 如果创建失败，重置房主状态
               hostId.value = null
               checkIsHost()
