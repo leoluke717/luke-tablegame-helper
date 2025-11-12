@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <h1>{{ title }}</h1>
-    <p>欢迎来到屁王争霸！</p>
+    <p>欢迎来到Luke的桌游助手！</p>
     <button @click="count++">点击计数: {{ count }}</button>
   </div>
 </template>
@@ -11,7 +11,7 @@ export default {
   name: 'App',
   data() {
     return {
-      title: '屁王争霸',
+      title: 'Luke的桌游助手',
       count: 0
     }
   }

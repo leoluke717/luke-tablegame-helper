@@ -1,6 +1,6 @@
-# 屁王争霸
+# Luke的桌游助手
 
-一个使用 Vue 3 + Vite 构建的简单网页项目。
+一个使用 Vue 3 + Vite 构建的桌游助手网页项目。
 
 ## 技术栈
 
@@ -57,7 +57,7 @@ npm run preview
 1. 在GitHub上创建新仓库
 2. 关联远程仓库：
    ```bash
-   git remote add origin https://github.com/你的用户名/piwang-contest.git
+   git remote add origin https://github.com/leoluke717/luke-tablegame-helper.git
    ```
 3. 推送代码：
    ```bash
