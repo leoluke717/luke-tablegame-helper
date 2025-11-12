@@ -75,6 +75,71 @@ export default {
     const playerName = ref('') // 临时存储待验证的昵称
     const pendingRoomId = ref('') // 待加入的房间号（用于对话框）
 
+    // 生成或获取浏览器唯一ID（用于身份保持）
+    const getBrowserId = () => {
+      let browserId = localStorage.getItem('browserId')
+      if (!browserId) {
+        // 生成基于浏览器特性的唯一ID
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        ctx.textBaseline = 'top'
+        ctx.font = '14px Arial'
+        ctx.fillText('Browser fingerprint', 2, 2)
+
+        const fingerprint = [
+          navigator.userAgent,
+          navigator.language,
+          screen.width + 'x' + screen.height,
+          new Date().getTimezoneOffset(),
+          canvas.toDataURL()
+        ].join('|')
+
+        // 简单哈希
+        let hash = 0
+        for (let i = 0; i < fingerprint.length; i++) {
+          const char = fingerprint.charCodeAt(i)
+          hash = ((hash << 5) - hash) + char
+          hash = hash & hash // 转换为32位整数
+        }
+
+        browserId = 'browser_' + Math.abs(hash).toString(36)
+        localStorage.setItem('browserId', browserId)
+      }
+      return browserId
+    }
+
+    // 检查房间内是否已存在当前浏览器玩家
+    const checkExistingPlayer = async (roomId) => {
+      try {
+        const { getDatabase, ref, get } = await import('firebase/database')
+        const database = getDatabase()
+        const playersRef = ref(database, `rooms/${roomId}/players`)
+        const snapshot = await get(playersRef)
+
+        if (snapshot.exists()) {
+          const players = snapshot.val()
+          const browserId = getBrowserId()
+
+          // 遍历玩家列表查找匹配
+          for (const playerId in players) {
+            if (playerId === browserId) {
+              console.log('♻️ 找到现有玩家:', players[playerId].name)
+              return {
+                exists: true,
+                playerId: playerId,
+                playerName: players[playerId].name
+              }
+            }
+          }
+        }
+
+        return { exists: false }
+      } catch (error) {
+        console.error('检查现有玩家失败:', error)
+        return { exists: false }
+      }
+    }
+
     // 自动检查URL参数中的room值（扫码进入）
     onMounted(() => {
       const roomFromQuery = route.query.room
@@ -122,7 +187,7 @@ export default {
       showNameDialog.value = true
     }
 
-    const joinRoom = () => {
+    const joinRoom = async () => {
       // 保持原始大小写，不要转换为大写
       const roomId = joinRoomId.value.trim()
 
@@ -138,11 +203,34 @@ export default {
         return
       }
 
-      // 显示昵称输入对话框
-      pendingRoomId.value = roomId
-      playerName.value = ''
-      showNameDialog.value = true
-      showJoinDialog.value = false // 关闭房间号输入对话框
+      // 检查房间内是否已存在当前浏览器玩家
+      console.log('🔍 检查房间内是否已存在玩家...')
+      const existingPlayer = await checkExistingPlayer(roomId)
+
+      if (existingPlayer.exists) {
+        // 玩家已存在，直接进入房间
+        console.log('✅ 玩家已存在，直接进入:', existingPlayer.playerName)
+
+        // 保存玩家信息
+        localStorage.setItem('playerName', existingPlayer.playerName)
+        localStorage.setItem('playerId', existingPlayer.playerId)
+        localStorage.setItem('roomId', roomId)
+
+        // 关闭对话框并跳转
+        showJoinDialog.value = false
+        isAutoJoining.value = false
+        joinRoomId.value = ''
+
+        // 跳转到房间大厅
+        router.push(`/lobby/${roomId}`)
+      } else {
+        // 玩家不存在，显示昵称输入对话框
+        console.log('🆕 玩家不存在，需要输入昵称')
+        pendingRoomId.value = roomId
+        playerName.value = ''
+        showNameDialog.value = true
+        showJoinDialog.value = false // 关闭房间号输入对话框
+      }
     }
 
     // 提交昵称处理
@@ -154,12 +242,13 @@ export default {
         return
       }
 
-      // 清理旧的玩家ID
-      localStorage.removeItem('playerId')
-      localStorage.removeItem('isHost')
+      // 获取浏览器唯一ID作为玩家ID
+      const browserId = getBrowserId()
 
       // 将玩家信息存储到 localStorage
       localStorage.setItem('playerName', name)
+      localStorage.setItem('playerId', browserId)
+      localStorage.removeItem('isHost')
 
       // 如果是创建房间，生成新房间号；否则使用待加入的房间号
       let roomId = pendingRoomId.value
@@ -171,6 +260,7 @@ export default {
 
       // 关闭对话框并跳转
       showNameDialog.value = false
+      isAutoJoining.value = false
       router.push(`/lobby/${roomId}`)
     }
 
