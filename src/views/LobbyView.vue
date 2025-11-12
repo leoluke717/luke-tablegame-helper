@@ -11,8 +11,27 @@
           <button v-if="isHost" class="btn-copy" @click="copyRoomId">📋 复制</button>
         </div>
         <div class="player-name">
+          <span class="player-avatar">{{ currentPlayer?.avatar || '😊' }}</span>
           你的昵称：<strong>{{ playerName }}</strong>
           <span v-if="isHost" class="host-badge">👑 房主</span>
+          <button class="btn-change-avatar" @click="showAvatarPicker = !showAvatarPicker">🎨 换头像</button>
+        </div>
+
+        <!-- Emoji选择器 -->
+        <div v-if="showAvatarPicker" class="avatar-picker">
+          <h4>选择头像</h4>
+          <div class="emoji-grid">
+            <button
+              v-for="emoji in AVATAR_EMOJIS"
+              :key="emoji"
+              class="emoji-button"
+              @click="selectAvatar(emoji)"
+              :class="{ selected: emoji === currentPlayer?.avatar }"
+            >
+              {{ emoji }}
+            </button>
+          </div>
+          <button class="btn-close-picker" @click="showAvatarPicker = false">完成</button>
         </div>
       </div>
 
@@ -31,6 +50,7 @@
         <div class="players-list">
           <div v-for="player in players" :key="player.id" class="player-item">
             <div class="player-info">
+              <span class="player-avatar">{{ player.avatar || '😊' }}</span>
               <span class="player-name">{{ player.name }}</span>
               <span v-if="player.id === hostId" class="host-indicator">👑</span>
             </div>
@@ -88,6 +108,8 @@ export default {
     const qrCanvas = ref(null)
     const hostId = ref(null) // 房主的玩家ID
     const currentPlayerId = ref(null) // 当前玩家的ID
+    const currentPlayer = ref(null) // 当前玩家的完整信息
+    const showAvatarPicker = ref(false) // 显示/隐藏头像选择器
 
     let playersRef = null
     let unsubscribe = null
@@ -97,6 +119,28 @@ export default {
     const DEBUG = import.meta.env.MODE === 'development'
     const log = (...args) => {
       if (DEBUG) console.log(...args)
+    }
+
+    // 头像Emoji集合（精选常用且易区分的emoji）
+    const AVATAR_EMOJIS = [
+      // 动物系列
+      '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦', '🐤', '🐣',
+      // 表情系列
+      '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '😘', '😗', '😙', '😚', '😋',
+      // 人物系列
+      '👦', '👧', '👨', '👩', '🧑', '👶', '👱‍♂️', '👱‍♀️', '👮‍♂️', '👮‍♀️', '👷‍♂️', '👷‍♀️', '💂‍♂️', '💂‍♀️', '🧙‍♂️', '🧙‍♀️',
+      // 食物系列
+      '🍎', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍒', '🍑', '🥝', '🍍', '🥥', '🥑', '🍅', '🥕', '🌽', '🍔', '🍟', '🍕', '🍪',
+      // 物品系列
+      '💎', '🎀', '🎁', '🎈', '🎉', '🎊', '🎯', '🎮', '🎲', '🧩', '🎨', '🎭', '🎪', '🎵', '🎶', '⚽', '🏀', '🏈', '⚾', '🎾',
+      // 自然系列
+      '🌸', '🌹', '🌺', '🌻', '🌼', '🌷', '🌱', '🍀', '🍁', '🍂', '🍃', '⭐', '🌟', '✨', '⚡', '🔥', '💧', '🌈', '☀️', '🌙'
+    ]
+
+    // 获取随机头像emoji
+    const getRandomAvatar = () => {
+      const randomIndex = Math.floor(Math.random() * AVATAR_EMOJIS.length)
+      return AVATAR_EMOJIS[randomIndex]
     }
 
     // 生成或获取浏览器唯一ID（与HomeView.vue保持一致）
@@ -240,7 +284,6 @@ export default {
         )
 
         const existingData = existingPlayerSnapshot.val()
-        let currentPlayer = null
 
         // 向后兼容性检查：如果localStorage中的playerId是旧格式（非browser_开头），
         // 则使用浏览器ID重新生成，确保ID格式一致性
@@ -264,14 +307,15 @@ export default {
 
         // 如果玩家ID存在且在玩家列表中，则重用
         if (playerId && existingData && existingData[playerId]) {
-          currentPlayer = existingData[playerId]
-          console.log('♻️ 重用现有玩家身份:', currentPlayer.name)
+          const existingPlayer = existingData[playerId]
+          currentPlayer.value = existingPlayer
+          console.log('♻️ 重用现有玩家身份:', existingPlayer.name)
           // 确保localStorage中的玩家ID是最新的
           localStorage.setItem('playerId', playerId)
         } else if (existingPlayerWithBrowserId) {
           // 向后兼容：如果房间中已存在使用当前浏览器ID的玩家，重用该玩家
-          currentPlayer = existingPlayerWithBrowserId
-          console.log('♻️ 向后兼容：重用现有浏览器玩家身份:', currentPlayer.name)
+          currentPlayer.value = existingPlayerWithBrowserId
+          console.log('♻️ 向后兼容：重用现有浏览器玩家身份:', existingPlayerWithBrowserId.name)
           // 更新localStorage为浏览器ID
           localStorage.setItem('playerId', browserId)
           playerId = browserId
@@ -280,18 +324,20 @@ export default {
           // 使用浏览器ID而不是随机生成，确保与HomeView.vue一致
           playerId = browserId
 
-          currentPlayer = {
+          const newPlayer = {
             id: playerId,
             name: playerName.value,
+            avatar: getRandomAvatar(), // 分配随机头像
             score: 0,
             joinedAt: Date.now()
           }
 
-          console.log('✨ 创建新玩家:', currentPlayer)
+          currentPlayer.value = newPlayer
+          console.log('✨ 创建新玩家:', newPlayer)
 
           // 写入 Firebase（使用重试机制）
           const newPlayerRef = dbRef(database, `rooms/${roomId}/players/${playerId}`)
-          await retryOperation(() => set(newPlayerRef, currentPlayer))
+          await retryOperation(() => set(newPlayerRef, newPlayer))
 
           // 保存玩家ID到 localStorage
           localStorage.setItem('playerId', playerId)
@@ -301,11 +347,25 @@ export default {
         currentPlayerId.value = playerId
         console.log('✅ currentPlayerId 设置完成:', currentPlayerId.value)
 
+        // 安全检查：确保 currentPlayer 已被正确设置
+        if (!currentPlayer.value) {
+          console.error('❌ 初始化失败：currentPlayer 仍未设置')
+          throw new Error('玩家初始化失败，请重试')
+        }
+
         // 监听玩家列表变化
         const unsubscribePlayers = onValue(roomPlayersRef, (snapshot) => {
           const data = snapshot.val()
           if (data) {
-            players.value = Object.values(data).sort((a, b) => a.joinedAt - b.joinedAt)
+            // 为向后兼容，为没有avatar的玩家添加默认头像
+            const playersArray = Object.values(data).sort((a, b) => a.joinedAt - b.joinedAt)
+            players.value = playersArray.map(player => {
+              if (!player.avatar) {
+                // 如果没有avatar，使用默认值
+                return { ...player, avatar: '😊' }
+              }
+              return player
+            })
           } else {
             players.value = []
           }
@@ -385,7 +445,18 @@ export default {
         }
       } catch (error) {
         if (DEBUG) console.error('初始化玩家失败:', error)
-        alert('连接服务器失败，请检查网络连接或联系房主。错误：' + error.message)
+
+        // 根据错误类型提供更友好的错误信息
+        let errorMessage = '连接服务器失败'
+        if (error.message.includes('Cannot set properties')) {
+          errorMessage = '玩家初始化失败，请刷新页面重试'
+        } else if (error.message.includes('network') || error.message.includes('Network')) {
+          errorMessage = '网络连接失败，请检查网络连接'
+        } else {
+          errorMessage = error.message || '未知错误'
+        }
+
+        alert(`连接服务器失败，请检查网络连接或联系房主。错误：${errorMessage}`)
         router.push('/')
       }
     }
@@ -410,6 +481,44 @@ export default {
         if (DEBUG) console.error('开始游戏失败:', error)
         alert('开始游戏失败：' + error.message)
       }
+    }
+
+    // 修改头像
+    const changeAvatar = async (newAvatar) => {
+      // 安全检查：确保玩家信息已正确初始化
+      if (!currentPlayer.value) {
+        console.error('❌ 头像更新失败：currentPlayer 未初始化')
+        alert('❌ 头像更新失败：玩家信息未初始化，请刷新页面重试')
+        return
+      }
+      if (!currentPlayerId.value) {
+        console.error('❌ 头像更新失败：currentPlayerId 未设置')
+        alert('❌ 头像更新失败：玩家ID未设置，请刷新页面重试')
+        return
+      }
+
+      try {
+        const updatedPlayer = {
+          ...currentPlayer.value,
+          avatar: newAvatar
+        }
+        currentPlayer.value = updatedPlayer
+
+        // 更新 Firebase
+        const playerRef = dbRef(database, `rooms/${roomId}/players/${currentPlayerId.value}`)
+        await retryOperation(() => update(playerRef, { avatar: newAvatar }))
+
+        console.log('✅ 头像更新成功:', newAvatar)
+      } catch (error) {
+        console.error('❌ 头像更新失败:', error)
+        alert('❌ 头像更新失败：' + error.message)
+      }
+    }
+
+    // 选择头像
+    const selectAvatar = async (emoji) => {
+      await changeAvatar(emoji)
+      showAvatarPicker.value = false
     }
 
     // 退出房间
@@ -486,10 +595,15 @@ export default {
       isHost,
       players,
       hostId,
+      currentPlayer,
+      showAvatarPicker,
       qrCanvas,
       copyRoomId,
       startGame,
-      exitLobby
+      exitLobby,
+      changeAvatar,
+      selectAvatar,
+      AVATAR_EMOJIS
     }
   }
 }
@@ -701,5 +815,131 @@ export default {
 
 .btn-exit:hover {
   background-color: #c82333;
+}
+
+/* 头像样式 */
+.player-avatar {
+  font-size: 2em;
+  line-height: 1;
+  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #42b983;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.player-name {
+  font-size: 1.1em;
+  color: #333;
+}
+
+/* 当前玩家头像样式 */
+.player-name .player-avatar {
+  font-size: 2.5em;
+  width: 50px;
+  height: 50px;
+  margin-right: 12px;
+}
+
+.btn-change-avatar {
+  margin-left: 15px;
+  padding: 6px 12px;
+  background-color: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #1976d2;
+  transition: all 0.2s;
+}
+
+.btn-change-avatar:hover {
+  background-color: #bbdefb;
+  border-color: #64b5f6;
+}
+
+/* Emoji选择器样式 */
+.avatar-picker {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px solid #42b983;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.avatar-picker h4 {
+  margin-bottom: 15px;
+  color: #333;
+  text-align: center;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 15px;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+}
+
+.emoji-button {
+  font-size: 2em;
+  padding: 10px;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.emoji-button:hover {
+  transform: scale(1.1);
+  border-color: #42b983;
+  background: #f0fdf4;
+}
+
+.emoji-button.selected {
+  border-color: #42b983;
+  background: #e8f5e9;
+  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.2);
+}
+
+.btn-close-picker {
+  width: 100%;
+  padding: 12px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.btn-close-picker:hover {
+  background-color: #359268;
 }
 </style>
