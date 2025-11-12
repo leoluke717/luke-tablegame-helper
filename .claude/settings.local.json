@@ -7,7 +7,8 @@
       "Bash(git add .)",
       "Bash(git commit:*)",
       "Bash(git add src/views/LobbyView.vue)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git add src/views/HomeView.vue)"
     ],
     "deny": [],
     "ask": []

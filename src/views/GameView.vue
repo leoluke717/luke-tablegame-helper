@@ -22,7 +22,7 @@
           <div v-for="player in players" :key="player.id" class="score-item" :class="{ active: player.id === currentPlayerId }">
             <div class="player-info">
               <span class="player-name">{{ player.name }}</span>
-              <span v-if="player.isHost" class="host-indicator">👑</span>
+              <span v-if="player.id === hostId" class="host-indicator">👑</span>
               <span v-if="player.id === currentPlayerId" class="turn-indicator">✓</span>
             </div>
             <div class="score">{{ player.score }}</div>

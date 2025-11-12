@@ -32,7 +32,7 @@
           <div v-for="player in players" :key="player.id" class="player-item">
             <div class="player-info">
               <span class="player-name">{{ player.name }}</span>
-              <span v-if="player.isHost" class="host-indicator">👑</span>
+              <span v-if="player.id === hostId" class="host-indicator">👑</span>
             </div>
           </div>
           <div v-if="players.length === 0" class="empty-state">
@@ -237,19 +237,28 @@ export default {
         roomRef = dbRef(database, `rooms/${roomId}`)
         const unsubscribeRoom = onValue(roomRef, async (snapshot) => {
           const roomData = snapshot.val()
-          if (roomData) {
-            // 更新房主ID
+          if (roomData && roomData.hostId) {
+            // 房间已存在，更新房主ID并验证权限
             hostId.value = roomData.hostId
             checkIsHost()
-          } else {
-            // 房间不存在，创建房间并设置房主（使用重试机制）
+          } else if (!roomData) {
+            // 房间不存在，创建房间并设置房主
+            // 立即更新本地状态，让用户立即看到房主标识
             hostId.value = currentPlayer.id
             checkIsHost()
-            await retryOperation(() => update(roomRef, {
-              hostId: currentPlayer.id,
-              createdAt: Date.now(),
-              gameStatus: 'waiting'
-            }))
+
+            try {
+              await retryOperation(() => update(roomRef, {
+                hostId: currentPlayer.id,
+                createdAt: Date.now(),
+                gameStatus: 'waiting'
+              }))
+            } catch (error) {
+              if (DEBUG) console.error('创建房间失败:', error)
+              // 如果创建失败，重置房主状态
+              hostId.value = null
+              checkIsHost()
+            }
           }
         })
 
