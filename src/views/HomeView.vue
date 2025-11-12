@@ -308,6 +308,7 @@ h1 {
   border-radius: 6px;
   margin-bottom: 20px;
   /* 移除text-transform，保留原始大小写 */
+  box-sizing: border-box; /* 确保padding包含在宽度内，边距一致 */
 }
 
 .input:focus {
