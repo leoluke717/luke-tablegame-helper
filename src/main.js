@@ -1,4 +1,7 @@
 import { createApp } from 'vue'
-import App from './App.vue'
+import router from './router'
+import './firebase'
 
-createApp(App).mount('#app')
+createApp({
+  template: '<router-view></router-view>'
+}).use(router).mount('#app')
