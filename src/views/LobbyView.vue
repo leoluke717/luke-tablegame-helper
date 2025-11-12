@@ -8,7 +8,7 @@
           <div class="room-id">
             房间号：<strong>{{ roomId }}</strong>
           </div>
-          <button class="btn-copy" @click="copyRoomId">📋 复制</button>
+          <button v-if="isHost" class="btn-copy" @click="copyRoomId">📋 复制</button>
         </div>
         <div class="player-name">
           你的昵称：<strong>{{ playerName }}</strong>
@@ -16,8 +16,8 @@
         </div>
       </div>
 
-      <!-- 邀请区域 -->
-      <div class="invite-section">
+      <!-- 邀请区域（仅房主可见） -->
+      <div v-if="isHost" class="invite-section">
         <h3>📱 邀请玩家</h3>
         <div class="qr-code-container">
           <canvas ref="qrCanvas" class="qr-canvas"></canvas>
@@ -36,7 +36,7 @@
             </div>
           </div>
           <div v-if="players.length === 0" class="empty-state">
-            等待玩家加入...
+            {{ isHost ? '等待玩家加入...' : '正在加入房间...' }}
           </div>
         </div>
       </div>
