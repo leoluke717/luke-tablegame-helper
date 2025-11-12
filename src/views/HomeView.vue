@@ -31,6 +31,31 @@
         </div>
       </div>
     </div>
+
+    <!-- 昵称输入对话框 -->
+    <div v-if="showNameDialog" class="dialog-overlay" @click="cancelNameDialog">
+      <div class="dialog" @click.stop>
+        <h2>{{ pendingRoomId ? '加入房间' : '创建房间' }}</h2>
+        <div v-if="isAutoJoining && pendingRoomId" class="scan-hint">
+          <p>📱 扫码进入房间</p>
+          <p class="room-id-display">房间号：<strong>{{ pendingRoomId }}</strong></p>
+        </div>
+        <p class="input-label">请输入你的昵称：</p>
+        <input
+          v-model="playerName"
+          placeholder="2-20个字符"
+          class="input"
+          @keyup.enter="submitName"
+          maxlength="20"
+        />
+        <div class="dialog-actions">
+          <button class="btn" @click="cancelNameDialog">取消</button>
+          <button class="btn btn-primary" @click="submitName" :disabled="!playerName.trim()">
+            {{ pendingRoomId ? '加入' : '创建' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -46,6 +71,9 @@ export default {
     const showJoinDialog = ref(false)
     const joinRoomId = ref('')
     const isAutoJoining = ref(false) // 是否正在自动加入房间
+    const showNameDialog = ref(false) // 显示昵称输入对话框
+    const playerName = ref('') // 临时存储待验证的昵称
+    const pendingRoomId = ref('') // 待加入的房间号（用于对话框）
 
     // 自动检查URL参数中的room值（扫码进入）
     onMounted(() => {
@@ -80,39 +108,22 @@ export default {
       if (!roomId || roomId.trim().length === 0) {
         return '房间号不能为空'
       }
-      if (!/^[A-Z0-9-]+$/.test(roomId.trim())) {
-        return '房间号只能包含大写字母、数字和连字符'
+      if (!/^[A-Za-z0-9-]+$/.test(roomId.trim())) {
+        return '房间号只能包含字母、数字和连字符'
       }
       return null
     }
 
     const createRoom = () => {
-      const playerName = prompt('请输入你的昵称：')
-      if (!playerName) return
-
-      const validationError = validatePlayerName(playerName)
-      if (validationError) {
-        alert(validationError)
-        return
-      }
-
-      // 生成8位房间号（增加长度减少碰撞）
-      const roomId = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`
-
-      // 清理旧的玩家ID
-      localStorage.removeItem('playerId')
-      localStorage.removeItem('isHost') // 不再存储房主标识
-
-      // 将玩家信息存储到 localStorage
-      localStorage.setItem('playerName', playerName.trim())
-      localStorage.setItem('roomId', roomId)
-
-      // 跳转到房间大厅
-      router.push(`/lobby/${roomId}`)
+      // 显示昵称输入对话框，设置待加入房间ID为空（创建房间）
+      pendingRoomId.value = ''
+      playerName.value = ''
+      showNameDialog.value = true
     }
 
     const joinRoom = () => {
-      const roomId = joinRoomId.value.trim().toUpperCase()
+      // 保持原始大小写，不要转换为大写
+      const roomId = joinRoomId.value.trim()
 
       const roomValidationError = validateRoomId(roomId)
       if (roomValidationError) {
@@ -126,31 +137,52 @@ export default {
         return
       }
 
-      const playerName = prompt('请输入你的昵称：')
-      if (!playerName) {
-        // 如果是自动扫码加入，用户取消输入，则返回首页
-        if (isAutoJoining.value) {
-          router.push('/')
-        }
-        return
-      }
+      // 显示昵称输入对话框
+      pendingRoomId.value = roomId
+      playerName.value = ''
+      showNameDialog.value = true
+      showJoinDialog.value = false // 关闭房间号输入对话框
+    }
 
-      const nameValidationError = validatePlayerName(playerName)
-      if (nameValidationError) {
-        alert(nameValidationError)
+    // 提交昵称处理
+    const submitName = () => {
+      const name = playerName.value.trim()
+      const validationError = validatePlayerName(name)
+      if (validationError) {
+        alert(validationError)
         return
       }
 
       // 清理旧的玩家ID
       localStorage.removeItem('playerId')
-      localStorage.removeItem('isHost') // 不再存储房主标识
+      localStorage.removeItem('isHost')
 
       // 将玩家信息存储到 localStorage
-      localStorage.setItem('playerName', playerName.trim())
+      localStorage.setItem('playerName', name)
+
+      // 如果是创建房间，生成新房间号；否则使用待加入的房间号
+      let roomId = pendingRoomId.value
+      if (!roomId) {
+        // 生成8位房间号（增加长度减少碰撞）
+        roomId = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`
+      }
       localStorage.setItem('roomId', roomId)
 
-      // 跳转到房间大厅
+      // 关闭对话框并跳转
+      showNameDialog.value = false
       router.push(`/lobby/${roomId}`)
+    }
+
+    // 昵称对话框取消处理
+    const cancelNameDialog = () => {
+      showNameDialog.value = false
+      playerName.value = ''
+      pendingRoomId.value = ''
+
+      // 如果是自动扫码加入，返回首页
+      if (isAutoJoining.value) {
+        router.push('/')
+      }
     }
 
     // 处理取消按钮
@@ -169,8 +201,13 @@ export default {
       showJoinDialog,
       joinRoomId,
       isAutoJoining,
+      showNameDialog,
+      playerName,
+      pendingRoomId,
       createRoom,
       joinRoom,
+      submitName,
+      cancelNameDialog,
       handleCancel
     }
   }
@@ -268,6 +305,13 @@ h1 {
 .input:focus {
   outline: none;
   border-color: #42b983;
+}
+
+.input-label {
+  margin: 15px 0 8px 0;
+  color: #555;
+  font-size: 1em;
+  text-align: left;
 }
 
 .dialog-actions {
