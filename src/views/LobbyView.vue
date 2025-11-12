@@ -215,10 +215,15 @@ export default {
         // 如果玩家ID存在且在玩家列表中，则重用
         if (playerId && existingData && existingData[playerId]) {
           currentPlayer = existingData[playerId]
-          console.log('♻️ 重用现有玩家:', currentPlayer)
+          console.log('♻️ 重用现有玩家身份:', currentPlayer.name)
+          // 确保localStorage中的玩家ID是最新的
+          localStorage.setItem('playerId', playerId)
         } else {
-          // 创建新玩家
-          playerId = Date.now().toString() + Math.random().toString(36).substring(7)
+          // 创建新玩家（可能是首次加入或重新加入）
+          // 如果有旧的playerId但不在列表中，生成新的ID
+          const newPlayerId = Date.now().toString() + Math.random().toString(36).substring(7)
+          playerId = newPlayerId
+
           currentPlayer = {
             id: playerId,
             name: playerName.value,
