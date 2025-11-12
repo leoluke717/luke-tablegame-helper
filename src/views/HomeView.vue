@@ -47,12 +47,15 @@ export default {
         return
       }
 
-      // 生成6位房间号
-      const roomId = Math.random().toString(36).substring(2, 8).toUpperCase()
+      // 生成8位房间号（增加长度减少碰撞）
+      const roomId = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`
+
+      // 清理旧的玩家ID
+      localStorage.removeItem('playerId')
+      localStorage.removeItem('isHost') // 不再存储房主标识
 
       // 将玩家信息存储到 localStorage
       localStorage.setItem('playerName', playerName.trim())
-      localStorage.setItem('isHost', 'true')
       localStorage.setItem('roomId', roomId)
 
       // 跳转到房间大厅
@@ -71,9 +74,12 @@ export default {
         return
       }
 
+      // 清理旧的玩家ID
+      localStorage.removeItem('playerId')
+      localStorage.removeItem('isHost') // 不再存储房主标识
+
       // 将玩家信息存储到 localStorage
       localStorage.setItem('playerName', playerName.trim())
-      localStorage.setItem('isHost', 'false')
       localStorage.setItem('roomId', joinRoomId.value.trim().toUpperCase())
 
       // 跳转到房间大厅

@@ -61,9 +61,17 @@ export default {
     const players = ref([])
     const currentPlayerId = ref(null)
     const currentPlayerName = ref('')
+    const hostId = ref(null) // 房主的玩家ID
+    const myPlayerId = ref(null) // 当前玩家的ID
 
     let roomRef = null
     let unsubscribe = null
+
+    // 生产环境调试控制
+    const DEBUG = import.meta.env.MODE === 'development'
+    const log = (...args) => {
+      if (DEBUG) console.log(...args)
+    }
 
     // 复制房间号
     const copyRoomId = async () => {
@@ -75,11 +83,16 @@ export default {
       }
     }
 
+    // 检查是否为房主（通过比较玩家ID）
+    const checkIsHost = () => {
+      isHost.value = myPlayerId.value && hostId.value && myPlayerId.value === hostId.value
+    }
+
     // 初始化游戏状态
     const initGame = async () => {
       // 从 localStorage 获取玩家信息
       playerName.value = localStorage.getItem('playerName') || ''
-      isHost.value = localStorage.getItem('isHost') === 'true'
+      const savedPlayerId = localStorage.getItem('playerId')
 
       if (!playerName.value) {
         alert('未找到玩家信息，返回首页')
@@ -87,40 +100,65 @@ export default {
         return
       }
 
-      // 监听游戏状态
-      roomRef = dbRef(database, `rooms/${roomId}`)
-      unsubscribe = onValue(roomRef, (snapshot) => {
-        const data = snapshot.val()
-        if (data) {
-          if (data.players) {
-            players.value = Object.values(data.players).sort((a, b) => a.joinedAt - b.joinedAt)
-          }
-          if (data.currentTurn) {
-            currentPlayerId.value = data.currentTurn
-            const currentPlayer = players.value.find(p => p.id === currentPlayerId.value)
-            if (currentPlayer) {
-              currentPlayerName.value = currentPlayer.name
+      try {
+        // 监听游戏状态
+        roomRef = dbRef(database, `rooms/${roomId}`)
+        unsubscribe = onValue(roomRef, (snapshot) => {
+          const data = snapshot.val()
+          if (data) {
+            if (data.players) {
+              players.value = Object.values(data.players).sort((a, b) => a.joinedAt - b.joinedAt)
+
+              // 找到当前玩家ID
+              const me = players.value.find(p => p.name === playerName.value)
+              if (me) {
+                myPlayerId.value = me.id
+              }
             }
-          } else if (players.value.length > 0) {
-            // 默认第一个玩家为当前玩家
-            currentPlayerId.value = players.value[0].id
-            currentPlayerName.value = players.value[0].name
+            // 更新房主ID
+            if (data.hostId) {
+              hostId.value = data.hostId
+              checkIsHost()
+            }
+            if (data.currentTurn) {
+              currentPlayerId.value = data.currentTurn
+              const currentPlayer = players.value.find(p => p.id === currentPlayerId.value)
+              if (currentPlayer) {
+                currentPlayerName.value = currentPlayer.name
+              }
+            } else if (players.value.length > 0) {
+              // 默认第一个玩家为当前玩家
+              currentPlayerId.value = players.value[0].id
+              currentPlayerName.value = players.value[0].name
+            }
           }
-        }
-      })
+        })
+      } catch (error) {
+        if (DEBUG) console.error('初始化游戏状态失败:', error)
+        alert('连接服务器失败：' + error.message)
+        router.push(`/lobby/${roomId}`)
+      }
     }
 
     // 结束回合（房主功能）
     const endTurn = async () => {
-      if (!isHost.value) return
+      if (!isHost.value) {
+        alert('只有房主可以结束回合')
+        return
+      }
 
-      const currentIndex = players.value.findIndex(p => p.id === currentPlayerId.value)
-      const nextIndex = (currentIndex + 1) % players.value.length
-      const nextPlayerId = players.value[nextIndex].id
+      try {
+        const currentIndex = players.value.findIndex(p => p.id === currentPlayerId.value)
+        const nextIndex = (currentIndex + 1) % players.value.length
+        const nextPlayerId = players.value[nextIndex].id
 
-      await update(roomRef, {
-        currentTurn: nextPlayerId
-      })
+        await update(roomRef, {
+          currentTurn: nextPlayerId
+        })
+      } catch (error) {
+        if (DEBUG) console.error('结束回合失败:', error)
+        alert('操作失败：' + error.message)
+      }
     }
 
     // 退出游戏

@@ -69,7 +69,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { database } from '../firebase'
 import { ref as dbRef, onValue, set, update, remove } from 'firebase/database'
@@ -86,31 +86,54 @@ export default {
     const isHost = ref(false)
     const players = ref([])
     const qrCanvas = ref(null)
+    const hostId = ref(null) // 房主的玩家ID
+    const currentPlayerId = ref(null) // 当前玩家的ID
 
     let playersRef = null
     let unsubscribe = null
+    let roomRef = null // 房间信息引用
+
+    // 生产环境调试控制
+    const DEBUG = import.meta.env.MODE === 'development'
+    const log = (...args) => {
+      if (DEBUG) console.log(...args)
+    }
+
+    // Firebase操作重试机制
+    const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
+      let lastError
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          return await operation()
+        } catch (error) {
+          lastError = error
+          if (DEBUG) console.warn(`Firebase操作失败，第${i + 1}次重试:`, error.message)
+          if (i < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
+          }
+        }
+      }
+      throw lastError
+    }
+
+    // 检查是否为房主（通过比较玩家ID）
+    const checkIsHost = () => {
+      isHost.value = currentPlayerId.value && hostId.value && currentPlayerId.value === hostId.value
+    }
 
     // 生成二维码
     const generateQRCode = async () => {
-      console.log('=== 开始生成二维码 ===')
-      console.log('Canvas 元素:', qrCanvas.value)
-      console.log('Canvas 尺寸:', qrCanvas.value?.width, 'x', qrCanvas.value?.height)
-      console.log('是否为房主:', isHost.value)
-      console.log('房间号:', roomId)
-
       if (!qrCanvas.value) {
-        console.error('❌ Canvas 元素未准备好')
+        if (DEBUG) console.error('❌ Canvas 元素未准备好')
         return
       }
 
       if (!isHost.value) {
-        console.log('⏭️ 非房主，不生成二维码')
+        if (DEBUG) console.log('⏭️ 非房主，不生成二维码')
         return
       }
 
       const joinUrl = `${window.location.origin}/?room=${roomId}`
-      console.log('✅ 生成的 URL:', joinUrl)
-      console.log('✅ URL 长度:', joinUrl.length, '字符')
 
       const options = {
         width: 200,
@@ -120,16 +143,12 @@ export default {
           light: '#FFFFFF'
         }
       }
-      console.log('✅ QRCode 选项:', options)
 
       try {
-        console.log('🔄 正在调用 QRCode.toCanvas()...')
         await QRCode.toCanvas(qrCanvas.value, joinUrl, options)
-        console.log('✅ 二维码生成成功！')
-        console.log('Canvas 当前内容:', qrCanvas.value.toDataURL().substring(0, 100) + '...')
+        if (DEBUG) console.log('✅ 二维码生成成功')
       } catch (err) {
-        console.error('❌ 二维码生成失败:', err)
-        // 在 canvas 区域显示错误信息
+        if (DEBUG) console.error('❌ 二维码生成失败:', err)
         if (qrCanvas.value) {
           const ctx = qrCanvas.value.getContext('2d')
           ctx.fillStyle = '#ff0000'
@@ -141,7 +160,6 @@ export default {
           ctx.fillText('See Console', 100, 120)
         }
       }
-      console.log('=== 二维码生成结束 ===\n')
     }
 
     // 复制房间号
@@ -158,7 +176,6 @@ export default {
     const initPlayer = async () => {
       // 从 localStorage 获取玩家信息
       playerName.value = localStorage.getItem('playerName') || ''
-      isHost.value = localStorage.getItem('isHost') === 'true'
       let playerId = localStorage.getItem('playerId')
 
       if (!playerName.value) {
@@ -168,14 +185,16 @@ export default {
       }
 
       try {
-        // 检查是否已存在该玩家
+        // 检查是否已存在该玩家（使用重试机制）
         const roomPlayersRef = dbRef(database, `rooms/${roomId}/players`)
-        const existingPlayerSnapshot = await new Promise((resolve) => {
-          const unsubscribeCheck = onValue(roomPlayersRef, (snapshot) => {
-            unsubscribeCheck()
-            resolve(snapshot)
-          }, { onlyOnce: true })
-        })
+        const existingPlayerSnapshot = await retryOperation(
+          () => new Promise((resolve) => {
+            const unsubscribeCheck = onValue(roomPlayersRef, (snapshot) => {
+              unsubscribeCheck()
+              resolve(snapshot)
+            }, { onlyOnce: true })
+          })
+        )
 
         const existingData = existingPlayerSnapshot.val()
         let currentPlayer = null
@@ -189,18 +208,20 @@ export default {
           currentPlayer = {
             id: playerId,
             name: playerName.value,
-            isHost: isHost.value,
             score: 0,
             joinedAt: Date.now()
           }
 
-          // 写入 Firebase
+          // 写入 Firebase（使用重试机制）
           const newPlayerRef = dbRef(database, `rooms/${roomId}/players/${playerId}`)
-          await set(newPlayerRef, currentPlayer)
+          await retryOperation(() => set(newPlayerRef, currentPlayer))
 
           // 保存玩家ID到 localStorage
           localStorage.setItem('playerId', playerId)
         }
+
+        // 保存当前玩家ID
+        currentPlayerId.value = currentPlayer.id
 
         // 监听玩家列表变化
         const unsubscribePlayers = onValue(roomPlayersRef, (snapshot) => {
@@ -212,10 +233,33 @@ export default {
           }
         })
 
+        // 监听房间信息（房主ID等）
+        roomRef = dbRef(database, `rooms/${roomId}`)
+        const unsubscribeRoom = onValue(roomRef, async (snapshot) => {
+          const roomData = snapshot.val()
+          if (roomData) {
+            // 更新房主ID
+            hostId.value = roomData.hostId
+            checkIsHost()
+          } else {
+            // 房间不存在，创建房间并设置房主（使用重试机制）
+            hostId.value = currentPlayer.id
+            checkIsHost()
+            await retryOperation(() => update(roomRef, {
+              hostId: currentPlayer.id,
+              createdAt: Date.now(),
+              gameStatus: 'waiting'
+            }))
+          }
+        })
+
         // 保存 unsubscribe 函数以便清理
-        unsubscribe = unsubscribePlayers
+        unsubscribe = () => {
+          unsubscribePlayers()
+          unsubscribeRoom()
+        }
       } catch (error) {
-        console.error('初始化玩家失败:', error)
+        if (DEBUG) console.error('初始化玩家失败:', error)
         alert('连接服务器失败，请检查网络连接或联系房主。错误：' + error.message)
         router.push('/')
       }
@@ -229,16 +273,16 @@ export default {
       }
 
       try {
-        // 设置第一个玩家为当前回合
-        await update(dbRef(database, `rooms/${roomId}`), {
+        // 设置第一个玩家为当前回合（使用重试机制）
+        await retryOperation(() => update(dbRef(database, `rooms/${roomId}`), {
           currentTurn: players.value[0].id,
           gameStatus: 'playing'
-        })
+        }))
 
         // 跳转到游戏页面
         router.push(`/game/${roomId}`)
       } catch (error) {
-        console.error('开始游戏失败:', error)
+        if (DEBUG) console.error('开始游戏失败:', error)
         alert('开始游戏失败：' + error.message)
       }
     }
@@ -246,55 +290,51 @@ export default {
     // 退出房间
     const exitLobby = async () => {
       if (confirm('确定要退出房间吗？')) {
-        // 清理玩家数据
-        const currentPlayer = players.value.find(p => p.name === playerName.value)
-        if (currentPlayer) {
-          const playerRef = dbRef(database, `rooms/${roomId}/players/${currentPlayer.id}`)
-          await remove(playerRef)
+        try {
+          // 清理玩家数据（使用重试机制）
+          const currentPlayer = players.value.find(p => p.name === playerName.value)
+          if (currentPlayer) {
+            const playerRef = dbRef(database, `rooms/${roomId}/players/${currentPlayer.id}`)
+            await retryOperation(() => remove(playerRef))
+          }
+
+          // 清理 localStorage
+          localStorage.removeItem('playerName')
+          localStorage.removeItem('isHost')
+          localStorage.removeItem('roomId')
+          localStorage.removeItem('playerId')
+
+          // 返回首页
+          router.push('/')
+        } catch (error) {
+          if (DEBUG) console.error('退出房间失败:', error)
+          alert('退出房间失败：' + error.message)
         }
-
-        // 清理 localStorage
-        localStorage.removeItem('playerName')
-        localStorage.removeItem('isHost')
-        localStorage.removeItem('roomId')
-        localStorage.removeItem('playerId')
-
-        // 返回首页
-        router.push('/')
       }
     }
 
+    // 监听房主权限变化，自动生成二维码
+    watch(isHost, (newValue) => {
+      if (newValue && qrCanvas.value) {
+        generateQRCode()
+      }
+    })
+
     onMounted(async () => {
-      console.log('🚀 onMounted 被调用')
       await initPlayer()
-      console.log('✅ initPlayer 完成')
-      console.log('当前 isHost:', isHost.value)
 
       // 等待 DOM 更新
       await nextTick()
-      console.log('✅ 等待 DOM 更新后')
-      console.log('当前 qrCanvas:', qrCanvas.value)
 
       // 等待 Canvas 准备就绪（最多重试 10 次，防止无限循环）
       let retryCount = 0
       const maxRetries = 10
       const waitForCanvas = () => {
-        console.log('🔍 检查 Canvas 是否准备就绪...')
-        console.log('  - qrCanvas.value:', qrCanvas.value)
-        console.log('  - isHost.value:', isHost.value)
-        console.log(`  - 重试次数: ${retryCount}/${maxRetries}`)
-
         if (isHost.value && qrCanvas.value) {
-          console.log('✅ 条件满足，生成二维码')
           generateQRCode()
         } else if (isHost.value && !qrCanvas.value && retryCount < maxRetries) {
           retryCount++
-          console.log('⏳ 等待 Canvas 准备就绪，200ms 后重试...')
           setTimeout(waitForCanvas, 200)
-        } else if (isHost.value && !qrCanvas.value && retryCount >= maxRetries) {
-          console.error('❌ Canvas 准备超时，二维码生成失败')
-        } else {
-          console.log('ℹ️ 非房主，跳过二维码生成')
         }
       }
 

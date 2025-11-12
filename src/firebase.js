@@ -7,13 +7,13 @@ import { getDatabase } from "firebase/database";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBLEkVWr4m7jJKf7wdSPMqluxSQ-2AmjDQ",
-  authDomain: "luke-tablegame-helper.firebaseapp.com",
-  databaseURL: "https://luke-tablegame-helper-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "luke-tablegame-helper",
-  storageBucket: "luke-tablegame-helper.firebasestorage.app",
-  messagingSenderId: "685546021217",
-  appId: "1:685546021217:web:0e5a6e43f377ff7e672520"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
