@@ -15,6 +15,36 @@
           你的昵称：<strong>{{ playerName }}</strong>
           <span v-if="isHost" class="host-badge">👑 房主</span>
           <button class="btn-change-avatar" @click="showAvatarPicker = !showAvatarPicker">🎨 换头像</button>
+          <button class="btn-change-name" @click="showNameEditor = !showNameEditor">✏️ 改昵称</button>
+        </div>
+
+        <!-- 昵称编辑器 -->
+        <div v-if="showNameEditor" class="name-editor">
+          <h4>修改昵称</h4>
+          <div class="name-input-container">
+            <input
+              v-model="newPlayerName"
+              type="text"
+              class="name-input"
+              :placeholder="playerName"
+              maxlength="10"
+              @input="validateName"
+              @keyup.enter="saveName"
+            />
+            <div class="validation-msg" :class="{ error: !isNameValid, success: isNameValid && newPlayerName.trim() }">
+              {{ nameValidationMsg }}
+            </div>
+          </div>
+          <div class="name-actions">
+            <button class="btn-cancel-name" @click="cancelNameEdit">取消</button>
+            <button
+              class="btn-save-name"
+              @click="saveName"
+              :disabled="!isNameValid || !newPlayerName.trim() || newPlayerName.trim() === playerName"
+            >
+              保存
+            </button>
+          </div>
         </div>
 
         <!-- Emoji选择器 -->
@@ -110,6 +140,10 @@ export default {
     const currentPlayerId = ref(null) // 当前玩家的ID
     const currentPlayer = ref(null) // 当前玩家的完整信息
     const showAvatarPicker = ref(false) // 显示/隐藏头像选择器
+    const showNameEditor = ref(false) // 显示/隐藏昵称编辑器
+    const newPlayerName = ref('') // 新昵称输入
+    const isNameValid = ref(false) // 昵称是否有效
+    const nameValidationMsg = ref('') // 验证消息
 
     let playersRef = null
     let unsubscribe = null
@@ -141,6 +175,41 @@ export default {
     const getRandomAvatar = () => {
       const randomIndex = Math.floor(Math.random() * AVATAR_EMOJIS.length)
       return AVATAR_EMOJIS[randomIndex]
+    }
+
+    // 验证昵称
+    const validateName = () => {
+      const name = newPlayerName.value.trim()
+
+      if (!name) {
+        isNameValid.value = false
+        nameValidationMsg.value = ''
+        return false
+      }
+
+      // 长度检查：2-10个字符
+      if (name.length < 2) {
+        isNameValid.value = false
+        nameValidationMsg.value = '昵称至少需要2个字符'
+        return false
+      }
+      if (name.length > 10) {
+        isNameValid.value = false
+        nameValidationMsg.value = '昵称不能超过10个字符'
+        return false
+      }
+
+      // 字符检查：支持中文、英文、数字、下划线
+      const validPattern = /^[\u4e00-\u9fa5a-zA-Z0-9_]+$/
+      if (!validPattern.test(name)) {
+        isNameValid.value = false
+        nameValidationMsg.value = '昵称只能包含中文、英文、数字和下划线'
+        return false
+      }
+
+      isNameValid.value = true
+      nameValidationMsg.value = '✓ 昵称可用'
+      return true
     }
 
     // 生成或获取浏览器唯一ID（与HomeView.vue保持一致）
@@ -515,10 +584,80 @@ export default {
       }
     }
 
+    // 修改昵称
+    const changePlayerName = async (newName) => {
+      // 安全检查：确保玩家信息已正确初始化
+      if (!currentPlayer.value) {
+        console.error('❌ 昵称更新失败：currentPlayer 未初始化')
+        alert('❌ 昵称更新失败：玩家信息未初始化，请刷新页面重试')
+        return false
+      }
+      if (!currentPlayerId.value) {
+        console.error('❌ 昵称更新失败：currentPlayerId 未设置')
+        alert('❌ 昵称更新失败：玩家ID未设置，请刷新页面重试')
+        return false
+      }
+
+      try {
+        const trimmedName = newName.trim()
+        const updatedPlayer = {
+          ...currentPlayer.value,
+          name: trimmedName
+        }
+        currentPlayer.value = updatedPlayer
+
+        // 更新 Firebase
+        const playerRef = dbRef(database, `rooms/${roomId}/players/${currentPlayerId.value}`)
+        await retryOperation(() => update(playerRef, { name: trimmedName }))
+
+        // 更新 localStorage
+        localStorage.setItem('playerName', trimmedName)
+        playerName.value = trimmedName
+
+        console.log('✅ 昵称更新成功:', trimmedName)
+        return true
+      } catch (error) {
+        console.error('❌ 昵称更新失败:', error)
+        alert('❌ 昵称更新失败：' + error.message)
+        return false
+      }
+    }
+
     // 选择头像
     const selectAvatar = async (emoji) => {
       await changeAvatar(emoji)
       showAvatarPicker.value = false
+    }
+
+    // 保存昵称
+    const saveName = async () => {
+      if (!validateName()) {
+        alert('请输入有效的昵称')
+        return
+      }
+
+      const name = newPlayerName.value.trim()
+      if (name === playerName.value) {
+        cancelNameEdit()
+        return
+      }
+
+      const success = await changePlayerName(name)
+      if (success) {
+        showNameEditor.value = false
+        newPlayerName.value = ''
+        nameValidationMsg.value = ''
+        isNameValid.value = false
+        alert('昵称修改成功！')
+      }
+    }
+
+    // 取消昵称编辑
+    const cancelNameEdit = () => {
+      showNameEditor.value = false
+      newPlayerName.value = ''
+      nameValidationMsg.value = ''
+      isNameValid.value = false
     }
 
     // 退出房间
@@ -597,12 +736,19 @@ export default {
       hostId,
       currentPlayer,
       showAvatarPicker,
+      showNameEditor,
+      newPlayerName,
+      isNameValid,
+      nameValidationMsg,
       qrCanvas,
       copyRoomId,
       startGame,
       exitLobby,
       changeAvatar,
       selectAvatar,
+      validateName,
+      saveName,
+      cancelNameEdit,
       AVATAR_EMOJIS
     }
   }
@@ -872,6 +1018,15 @@ export default {
     font-size: 1.6em;
     padding: 8px;
   }
+
+  /* 昵称编辑器移动端适配 */
+  .name-actions {
+    flex-direction: column;
+  }
+
+  .btn-change-name {
+    margin-left: 6px;
+  }
 }
 
 .btn-change-avatar {
@@ -889,6 +1044,126 @@ export default {
 .btn-change-avatar:hover {
   background-color: #bbdefb;
   border-color: #64b5f6;
+}
+
+.btn-change-name {
+  margin-left: 8px;
+  padding: 6px 12px;
+  background-color: #f3e5f5;
+  border: 1px solid #ce93d8;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #8e24aa;
+  transition: all 0.2s;
+}
+
+.btn-change-name:hover {
+  background-color: #e1bee7;
+  border-color: #ba68c8;
+}
+
+/* 昵称编辑器样式 */
+.name-editor {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px solid #42b983;
+  animation: slideDown 0.3s ease;
+}
+
+.name-editor h4 {
+  margin-bottom: 15px;
+  color: #333;
+  text-align: center;
+}
+
+.name-input-container {
+  margin-bottom: 15px;
+}
+
+.name-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 1.1em;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  outline: none;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.name-input:focus {
+  border-color: #42b983;
+  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.1);
+}
+
+.name-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.validation-msg {
+  margin-top: 8px;
+  font-size: 0.9em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.validation-msg.error {
+  color: #d32f2f;
+  background-color: #ffebee;
+}
+
+.validation-msg.success {
+  color: #388e3c;
+  background-color: #e8f5e9;
+}
+
+.name-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-cancel-name {
+  flex: 1;
+  padding: 12px;
+  background-color: #f5f5f5;
+  color: #666;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.btn-cancel-name:hover {
+  background-color: #eeeeee;
+}
+
+.btn-save-name {
+  flex: 1;
+  padding: 12px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.btn-save-name:hover:not(:disabled) {
+  background-color: #359268;
+}
+
+.btn-save-name:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
 
 /* Emoji选择器样式 */
