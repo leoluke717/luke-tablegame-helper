@@ -51,9 +51,20 @@ export function usePiZheXianZhiGame(roomId) {
   const listenToRoom = () => {
     unsubscribe.room = onValue(roomRef, (snapshot) => {
       const data = snapshot.val()
+      const oldStatus = roomData.value?.status
       roomData.value = data || {}
 
       console.log('🏠 房间数据更新:', data)
+
+      // 当房间状态从 playing 变为其他状态时，重置 isLoading
+      if (oldStatus === 'playing' && data?.status !== 'playing') {
+        isLoading.value = false
+      }
+
+      // 如果初始状态就不是 playing，重置 isLoading
+      if (!oldStatus && data?.status !== 'playing') {
+        isLoading.value = false
+      }
     }, (err) => {
       console.error('❌ 房间数据监听失败:', err)
       error.value = '房间数据监听失败: ' + err.message
@@ -119,20 +130,36 @@ export function usePiZheXianZhiGame(roomId) {
       // 生成场景牌
       const cards = generateScenarioCards(bigFartCount)
 
-      // 更新Firebase
-      await update(roomRef, {
+      // 获取所有玩家的ID列表
+      const playerIds = players.value.map(p => p.id)
+      console.log('👥 重置所有玩家身份:', playerIds)
+
+      // 创建批量更新操作
+      const updateData = {
         gameType: 'piZheXianZhi',
         status: GAME_STATUS.PLAYING,
         currentFloor: 1,
         fartCardsRevealedCount: 0,
         'settings/bigFartCount': bigFartCount,
         'settings/smallFartCount': 4 - bigFartCount
+      }
+
+      // 为每个玩家重置所有游戏相关数据
+      playerIds.forEach(playerId => {
+        updateData[`players/${playerId}/identity`] = null
+        updateData[`players/${playerId}/identitySelectedAt`] = null
+        updateData[`players/${playerId}/sequence`] = null
+        updateData[`players/${playerId}/ready`] = false
+        updateData[`players/${playerId}/status`] = 'alive'
       })
+
+      // 更新Firebase（房间数据和玩家身份）
+      await update(roomRef, updateData)
 
       // 保存场景牌
       await set(cardsRef, cards)
 
-      console.log('✅ 游戏初始化完成')
+      console.log('✅ 游戏初始化完成，所有玩家需要重新选择身份')
     } catch (err) {
       console.error('❌ 游戏初始化失败:', err)
       error.value = '游戏初始化失败: ' + err.message
@@ -370,6 +397,43 @@ export function usePiZheXianZhiGame(roomId) {
   })
 
   /**
+   * 获取下一个需要揭示的楼层
+   */
+  const nextFloorToReveal = computed(() => {
+    if (!scenarioCards.value || Object.keys(scenarioCards.value).length === 0) {
+      return null
+    }
+
+    // 找到第一个未揭示的楼层
+    const floors = Object.keys(scenarioCards.value).map(Number).sort((a, b) => a - b)
+    for (const floor of floors) {
+      const card = scenarioCards.value[floor]
+      if (card && !card.revealed) {
+        return floor
+      }
+    }
+
+    // 所有楼层都已揭示
+    return null
+  })
+
+  /**
+   * 获取已揭示的有屁牌数量
+   */
+  const fartCardsRevealedCount = computed(() => {
+    if (!scenarioCards.value) return 0
+
+    let count = 0
+    Object.values(scenarioCards.value).forEach(card => {
+      if (card && card.revealed && card.hasFart) {
+        count++
+      }
+    })
+
+    return count
+  })
+
+  /**
    * 清理监听器
    */
   const cleanup = () => {
@@ -398,6 +462,8 @@ export function usePiZheXianZhiGame(roomId) {
     // 计算属性
     isGameFinished,
     areAllFartCardsRevealed: areAllFartCardsRevealedComputed,
+    nextFloorToReveal,
+    fartCardsRevealedCount,
 
     // 方法
     initGame,
