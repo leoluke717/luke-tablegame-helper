@@ -1085,6 +1085,34 @@ export default {
 
 /* 移动端适配 */
 @media (max-width: 768px) {
+  .lobby-container {
+    padding: 15px;
+  }
+
+  .room-header h1 {
+    font-size: 1.5em;
+  }
+
+  .room-info {
+    font-size: 1em;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .room-id strong {
+    font-size: 1.2em;
+  }
+
+  .player-name {
+    font-size: 1em;
+  }
+
+  .btn-change-avatar,
+  .btn-change-name {
+    font-size: 0.85em;
+    padding: 5px 10px;
+  }
+
   .player-avatar {
     width: 34px;
     height: 34px;
@@ -1121,9 +1149,42 @@ export default {
   }
 
   /* 游戏选择区域移动端适配 */
+  .game-selection h3 {
+    font-size: 1.1em;
+  }
+
   .game-name {
-    font-size: 1.3em;
+    font-size: 1.2em;
     padding: 6px 16px;
+  }
+
+  /* 玩家列表移动端适配 */
+  .players-section h3 {
+    font-size: 1.1em;
+  }
+
+  .player-item {
+    padding: 12px 15px;
+  }
+
+  .player-name {
+    font-size: 1em;
+  }
+
+  .host-badge {
+    font-size: 0.85em;
+    padding: 3px 10px;
+  }
+
+  /* 按钮移动端适配 */
+  .btn {
+    font-size: 1.1em;
+    padding: 12px 30px;
+  }
+
+  .btn-copy {
+    font-size: 0.9em;
+    padding: 6px 12px;
   }
 
   .actions .btn {
@@ -1133,6 +1194,19 @@ export default {
 
   .btn-settings {
     margin-right: 0;
+  }
+
+  .btn-exit {
+    font-size: 1em;
+    padding: 8px 24px;
+  }
+
+  .waiting-status p {
+    font-size: 1em;
+  }
+
+  .hint {
+    font-size: 0.85em;
   }
 }
 
