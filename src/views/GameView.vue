@@ -2,52 +2,250 @@
   <div id="game">
     <div class="game-container">
       <!-- 游戏头部 -->
-      <div class="game-header">
-        <h1>🎮 游戏进行中</h1>
+      <header class="game-header">
+        <h1>🎯 屁者先知</h1>
         <div class="room-info">
-          房间号：<strong>{{ roomId }}</strong>
+          <span class="room-id">房间号: {{ roomId }}</span>
           <button class="btn-copy" @click="copyRoomId">📋 复制</button>
         </div>
-      </div>
+        <div class="player-info" v-if="currentPlayer">
+          <span class="player-name">👤 {{ currentPlayer.name }}</span>
+          <span class="player-role">
+            {{ getRoleText(currentPlayer) }}
+          </span>
+          <span v-if="currentPlayer.status === 'out'" class="status-eliminated">
+            💀 已出局
+          </span>
+        </div>
+      </header>
 
-      <!-- 游戏状态 -->
-      <div class="game-status">
-        <h2>当前回合：<span class="current-player">{{ currentPlayerName || '等待中...' }}</span></h2>
-      </div>
+      <!-- 主游戏区域 -->
+      <div class="game-main">
+        <!-- 左侧：电梯楼层和卡牌 -->
+        <div class="left-panel">
+          <!-- 电梯显示区 -->
+          <section class="elevator-section">
+            <h2>🏢 电梯楼层 ({{ sortedFloors.length }}张牌)</h2>
+            <div class="elevator-grid">
+              <div
+                v-for="floor in sortedFloors"
+                :key="floor"
+                class="floor-card"
+                :class="{
+                  'revealed': getCard(floor)?.revealed,
+                  'hidden': !getCard(floor)?.revealed && !isAssassinViewing,
+                  'fart-card': getCard(floor)?.hasFart,
+                  'big-fart': isBigFartCard(floor),
+                  'current-floor': floor === nextFloorToReveal
+                }"
+                @click="showCardEffect(floor)"
+              >
+                <div class="floor-number">{{ floor }}F</div>
 
-      <!-- 玩家计分板 -->
-      <div class="scoreboard">
-        <h3>📊 计分板</h3>
-        <div class="scores">
-          <div v-for="player in players" :key="player.id" class="score-item" :class="{ active: player.id === currentPlayerId }">
-            <div class="player-info">
-              <span class="player-name">{{ player.name }}</span>
-              <span v-if="player.id === hostId" class="host-indicator">👑</span>
-              <span v-if="player.id === currentPlayerId" class="turn-indicator">✓</span>
+                <!-- 卡牌内容 -->
+                <div class="card-content">
+                  <div v-if="!getCard(floor)?.revealed && !isAssassinViewing" class="hidden-content">
+                    ████
+                  </div>
+                  <div v-else-if="getCard(floor)?.revealed" class="revealed-content">
+                    <div class="card-name">{{ getCard(floor)?.cardName }}</div>
+                    <div v-if="isBigFartCard(floor)" class="big-fart-tip">
+                      💥 可点击查看
+                    </div>
+                  </div>
+                  <div v-else-if="isAssassinViewing" class="assassin-content">
+                    <div class="card-name">{{ getCard(floor)?.cardName }}</div>
+                    <div class="assassin-tip">👁️ 屁者模式</div>
+                  </div>
+                </div>
+
+                <!-- 楼层状态标识 -->
+                <div class="floor-status" :class="getCardBadgeClass(floor)">
+                  {{ getCardBadgeText(floor) }}
+                </div>
+
+                <!-- 当前楼层指示器 -->
+                <div v-if="floor === nextFloorToReveal" class="pulse-indicator"></div>
+              </div>
             </div>
-            <div class="score">{{ player.score }}</div>
+          </section>
+
+          <!-- 卡牌效果弹窗 -->
+          <div v-if="selectedCard" class="modal-overlay" @click="closeModal">
+            <div class="modal" @click.stop>
+              <div class="modal-header">
+                <h3>{{ selectedCard.cardName }}</h3>
+                <button class="btn-close" @click="closeModal">×</button>
+              </div>
+              <div class="modal-body">
+                <div class="effect-label">卡牌效果:</div>
+                <div class="effect-text">{{ selectedCard.cardEffect }}</div>
+
+                <div class="card-details">
+                  <div class="detail-item">
+                    <strong>楼层:</strong> {{ selectedCard.floor }}F
+                  </div>
+                  <div class="detail-item">
+                    <strong>类型:</strong> {{ selectedCard.hasFart ? '有屁牌' : '无屁牌' }}
+                  </div>
+                  <div class="detail-item">
+                    <strong>状态:</strong> {{ selectedCard.revealed ? '已揭示' : '未揭示' }}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <!-- 右侧：玩家列表和控制面板 -->
+        <div class="right-panel">
+          <!-- 玩家列表 -->
+          <section class="players-section">
+            <h2>👥 玩家 ({{ players.length }}人)</h2>
+            <div class="players-list">
+              <div
+                v-for="player in players"
+                :key="player.id"
+                class="player-card"
+                :class="{ 'out': player.status === 'out', 'me': player.id === myPlayerId }"
+              >
+                <div class="player-header">
+                  <span class="player-name">{{ player.name }}</span>
+                  <span v-if="player.id === roomData?.hostId" class="host-badge">👑</span>
+                </div>
+                <div class="player-info">
+                  <div class="info-row">
+                    <span class="label">身份:</span>
+                    <span class="value">
+                      {{ getIdentityText(player.identity) }}
+                    </span>
+                  </div>
+                  <div class="info-row">
+                    <span class="label">状态:</span>
+                    <span class="value">{{ player.status === 'alive' ? '✅ 存活' : '❌ 出局' }}</span>
+                  </div>
+                </div>
+                <div class="player-actions" v-if="canRevealCards && player.id !== myPlayerId && player.status === 'alive'">
+                  <button class="btn-eliminate" @click="eliminatePlayer(player.id)">
+                    💀 出局
+                  </button>
+                </div>
+              </div>
+              <div v-if="players.length === 0" class="players-empty">
+                等待玩家加入...
+              </div>
+            </div>
+          </section>
+
+          <!-- 游戏控制面板 -->
+          <section class="control-panel" v-if="roomData?.status === 'playing'">
+            <h2>🎮 游戏控制</h2>
+
+            <!-- 房主操作 -->
+            <div v-if="canRevealCards" class="host-controls">
+              <button
+                class="btn-primary"
+                @click="revealNextCard"
+                :disabled="!nextFloorToReveal"
+              >
+                {{ nextFloorToReveal ? `📤 揭示 ${nextFloorToReveal}F` : '✅ 全部揭示完成' }}
+              </button>
+
+              <button
+                v-if="fartCardsRevealedCount >= 4"
+                class="btn-settlement"
+                @click="triggerSettlement"
+              >
+                🏁 终局结算
+              </button>
+
+              <button
+                class="btn-secondary"
+                @click="initializeGame"
+                :disabled="isLoading"
+              >
+                🔄 重新开始
+              </button>
+            </div>
+
+            <!-- 屁者特权 -->
+            <div v-if="isAssassin && !gameResult" class="assassin-controls">
+              <button
+                class="btn-assassin"
+                :class="{ 'active': isAssassinViewing }"
+                @click="toggleAssassinView"
+              >
+                {{ isAssassinViewing ? '👁️ 查看中...' : '👁️ 查看牌库' }}
+              </button>
+              <p class="hint">
+                {{ isAssassinViewing ? '点击查看所有楼层牌' : '临时查看隐藏牌库' }}
+              </p>
+            </div>
+
+            <!-- 身份选择（未选择时显示） -->
+            <div v-if="!currentPlayer?.identity && roomData?.status === 'playing'" class="identity-selection">
+              <h3>🎭 选择你的身份</h3>
+              <div class="identity-buttons">
+                <button
+                  class="btn-identity"
+                  @click="selectIdentity(PLAYER_IDENTITY.PASSENGER)"
+                >
+                  👤 乘客
+                </button>
+                <button
+                  class="btn-identity assassin"
+                  @click="selectIdentity(PLAYER_IDENTITY.ASSASSIN)"
+                >
+                  💀 屁者
+                </button>
+              </div>
+              <p class="hint">选择后无法更改，请谨慎选择</p>
+            </div>
+          </section>
+
+          <!-- 游戏结果 -->
+          <section v-if="gameResult" class="result-section">
+            <div class="result-banner">
+              <div class="trophy">🏆</div>
+              <h2>游戏结束</h2>
+              <div class="winner-text">
+                {{ gameResult.winner === PLAYER_IDENTITY.PASSENGER ? '👤 乘客阵营获胜' : '💀 屁者阵营获胜' }}
+              </div>
+              <div class="result-reason">
+                {{ gameResult.reason }}
+              </div>
+            </div>
+
+            <div class="result-stats">
+              <h3>📊 游戏统计</h3>
+              <ul>
+                <li>揭示有屁牌: {{ gameResult.statistics?.fartCardsRevealed || 0 }}张</li>
+                <li>存活乘客: {{ gameResult.statistics?.passengersAlive || 0 }}人</li>
+                <li>存活屁者: {{ gameResult.statistics?.assassinsAlive || 0 }}人</li>
+              </ul>
+            </div>
+
+            <button class="btn-primary" @click="exitGame">
+              返回大厅
+            </button>
+          </section>
         </div>
       </div>
 
-      <!-- 操作按钮区域 -->
-      <div class="actions">
-        <button v-if="isHost" class="btn btn-action" @click="endTurn">
-          ⏭️ 结束回合
-        </button>
-        <button class="btn btn-exit" @click="exitGame">
-          🚪 退出游戏
-        </button>
-      </div>
+      <!-- 退出按钮 -->
+      <button class="btn-exit" @click="exitGame">
+        🚪 退出游戏
+      </button>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { database } from '../firebase'
-import { ref as dbRef, onValue, update } from 'firebase/database'
+import { usePiZheXianZhiGame } from '../composables/usePiZheXianZhiGame'
+import { PLAYER_IDENTITY } from '../config/games/piZheXianZhiDataModel'
+import { CARD_EFFECTS } from '../config/games/piZheXianZhiCardEffects'
 
 export default {
   name: 'GameView',
@@ -56,24 +254,100 @@ export default {
     const router = useRouter()
     const roomId = route.params.roomId
 
-    const playerName = ref('')
-    const isHost = ref(false)
-    const players = ref([])
-    const currentPlayerId = ref(null)
-    const currentPlayerName = ref('')
-    const hostId = ref(null) // 房主的玩家ID
-    const myPlayerId = ref(null) // 当前玩家的ID
+    // 初始化游戏逻辑
+    const gameLogic = usePiZheXianZhiGame(roomId)
 
-    let roomRef = null
-    let unsubscribe = null
+    // 本地状态
+    const isAssassinViewing = ref(false)
+    const selectedCard = ref(null)
+    const myPlayerId = ref(localStorage.getItem('playerId') || '')
 
-    // 生产环境调试控制
-    const DEBUG = import.meta.env.MODE === 'development'
-    const log = (...args) => {
-      if (DEBUG) console.log(...args)
+    // 从 gameLogic 获取数据
+    const {
+      roomData,
+      players,
+      scenarioCards,
+      gameResult,
+      isLoading,
+      nextFloorToReveal,
+      fartCardsRevealedCount,
+      initGame,
+      revealNextCard,
+      triggerSettlement,
+      eliminatePlayer,
+      selectPlayerIdentity,
+      isHost,
+      isAssassin,
+      cleanup
+    } = gameLogic
+
+    // 计算属性
+    const currentPlayer = computed(() => {
+      return players.value.find(p => p.id === myPlayerId.value)
+    })
+
+    const canRevealCards = computed(() => {
+      return isHost(myPlayerId.value)
+    })
+
+    const sortedFloors = computed(() => {
+      return Object.keys(scenarioCards.value)
+        .map(Number)
+        .sort((a, b) => a - b)
+    })
+
+    const getCard = (floor) => {
+      return scenarioCards.value[floor]
     }
 
-    // 复制房间号
+    const isBigFartCard = (floor) => {
+      const card = getCard(floor)
+      if (!card) return false
+      const cardInfo = CARD_EFFECTS[card.cardType]
+      return cardInfo?.isBigFart || false
+    }
+
+    const getCardBadgeClass = (floor) => {
+      const card = getCard(floor)
+      if (!card) return ''
+
+      if (!card.revealed && !isAssassinViewing.value) {
+        return 'badge-hidden'
+      }
+
+      if (card.hasFart) {
+        return card.cardType === '有屁' ? 'badge-small-fart' : 'badge-big-fart'
+      }
+
+      return 'badge-no-fart'
+    }
+
+    const getCardBadgeText = (floor) => {
+      const card = getCard(floor)
+      if (!card) return ''
+
+      if (!card.revealed && !isAssassinViewing.value) {
+        return '未揭示'
+      }
+
+      if (card.hasFart) {
+        return card.cardType === '有屁' ? '小屁牌' : '大屁牌'
+      }
+
+      return '无屁牌'
+    }
+
+    const getRoleText = (player) => {
+      if (player.id === roomData.value?.hostId) return '👑 房主'
+      if (player.identity === PLAYER_IDENTITY.ASSASSIN) return '💀 屁者'
+      return '👤 乘客'
+    }
+
+    const getIdentityText = (identity) => {
+      return identity === PLAYER_IDENTITY.ASSASSIN ? '💀 屁者' : '👤 乘客'
+    }
+
+    // 方法
     const copyRoomId = async () => {
       try {
         await navigator.clipboard.writeText(roomId)
@@ -83,111 +357,97 @@ export default {
       }
     }
 
-    // 检查是否为房主（通过比较玩家ID）
-    const checkIsHost = () => {
-      isHost.value = myPlayerId.value && hostId.value && myPlayerId.value === hostId.value
+    const showCardEffect = (floor) => {
+      const card = getCard(floor)
+      if (!card) return
+
+      // 大屁牌可以点击查看效果
+      if (card.revealed && isBigFartCard(floor)) {
+        selectedCard.value = card
+        return
+      }
+
+      // 屁者在查看模式可以查看所有牌
+      if (isAssassinViewing.value) {
+        selectedCard.value = card
+        return
+      }
     }
 
-    // 初始化游戏状态
-    const initGame = async () => {
-      // 从 localStorage 获取玩家信息
-      playerName.value = localStorage.getItem('playerName') || ''
-      const savedPlayerId = localStorage.getItem('playerId')
+    const closeModal = () => {
+      selectedCard.value = null
+    }
 
-      if (!playerName.value) {
-        alert('未找到玩家信息，返回首页')
-        router.push('/')
+    const toggleAssassinView = () => {
+      isAssassinViewing.value = !isAssassinViewing.value
+    }
+
+    const selectIdentity = async (identity) => {
+      if (!myPlayerId.value) {
+        alert('未找到玩家信息')
         return
       }
 
       try {
-        // 监听游戏状态
-        roomRef = dbRef(database, `rooms/${roomId}`)
-        unsubscribe = onValue(roomRef, (snapshot) => {
-          const data = snapshot.val()
-          if (data) {
-            if (data.players) {
-              players.value = Object.values(data.players).sort((a, b) => a.joinedAt - b.joinedAt)
-
-              // 找到当前玩家ID
-              const me = players.value.find(p => p.name === playerName.value)
-              if (me) {
-                myPlayerId.value = me.id
-              }
-            }
-            // 更新房主ID
-            if (data.hostId) {
-              hostId.value = data.hostId
-              checkIsHost()
-            }
-            if (data.currentTurn) {
-              currentPlayerId.value = data.currentTurn
-              const currentPlayer = players.value.find(p => p.id === currentPlayerId.value)
-              if (currentPlayer) {
-                currentPlayerName.value = currentPlayer.name
-              }
-            } else if (players.value.length > 0) {
-              // 默认第一个玩家为当前玩家
-              currentPlayerId.value = players.value[0].id
-              currentPlayerName.value = players.value[0].name
-            }
-          }
-        })
-      } catch (error) {
-        if (DEBUG) console.error('初始化游戏状态失败:', error)
-        alert('连接服务器失败：' + error.message)
-        router.push(`/lobby/${roomId}`)
+        await selectPlayerIdentity(myPlayerId.value, identity)
+      } catch (err) {
+        alert('身份选择失败: ' + err.message)
       }
     }
 
-    // 结束回合（房主功能）
-    const endTurn = async () => {
-      if (!isHost.value) {
-        alert('只有房主可以结束回合')
-        return
-      }
-
-      try {
-        const currentIndex = players.value.findIndex(p => p.id === currentPlayerId.value)
-        const nextIndex = (currentIndex + 1) % players.value.length
-        const nextPlayerId = players.value[nextIndex].id
-
-        await update(roomRef, {
-          currentTurn: nextPlayerId
-        })
-      } catch (error) {
-        if (DEBUG) console.error('结束回合失败:', error)
-        alert('操作失败：' + error.message)
-      }
-    }
-
-    // 退出游戏
     const exitGame = () => {
       if (confirm('确定要退出游戏吗？')) {
         router.push(`/lobby/${roomId}`)
       }
     }
 
+    // 生命周期
     onMounted(() => {
+      // 如果没有玩家ID，重定向到大厅
+      if (!myPlayerId.value) {
+        router.push(`/lobby/${roomId}`)
+        return
+      }
+
+      // 初始化游戏
       initGame()
     })
 
     onUnmounted(() => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
+      cleanup()
     })
 
     return {
       roomId,
-      playerName,
-      isHost,
+      roomData,
       players,
-      currentPlayerId,
-      currentPlayerName,
-      hostId,
+      scenarioCards,
+      gameResult,
+      isLoading,
+      nextFloorToReveal,
+      fartCardsRevealedCount,
+      currentPlayer,
+      canRevealCards,
+      isAssassin: isAssassin(myPlayerId.value),
+      sortedFloors,
+      isAssassinViewing,
+      selectedCard,
+      PLAYER_IDENTITY,
+      getCard,
+      isBigFartCard,
+      getCardBadgeClass,
+      getCardBadgeText,
+      getRoleText,
+      getIdentityText,
       copyRoomId,
-      endTurn,
+      revealNextCard,
+      triggerSettlement,
+      eliminatePlayer,
+      initializeGame,
+      toggleAssassinView,
+      selectIdentity,
+      showCardEffect,
+      closeModal,
       exitGame
     }
   }
@@ -202,24 +462,22 @@ export default {
 }
 
 .game-container {
-  max-width: 800px;
+  max-width: 1400px;
   margin: 0 auto;
-  background: white;
-  border-radius: 16px;
-  padding: 30px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
 .game-header {
-  text-align: center;
-  margin-bottom: 30px;
-  border-bottom: 2px solid #f0f0f0;
-  padding-bottom: 20px;
+  background: white;
+  padding: 20px 30px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .game-header h1 {
+  margin: 0 0 15px 0;
   color: #333;
-  margin-bottom: 20px;
+  text-align: center;
 }
 
 .room-info {
@@ -227,18 +485,18 @@ export default {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  font-size: 1.1em;
+  margin-bottom: 10px;
 }
 
-.room-info strong {
-  color: #42b983;
-  font-size: 1.2em;
-  letter-spacing: 2px;
+.room-id {
+  font-weight: bold;
+  color: #555;
 }
 
 .btn-copy {
   padding: 6px 12px;
-  background-color: #f0f0f0;
+  background: #42b983;
+  color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -246,120 +504,711 @@ export default {
 }
 
 .btn-copy:hover {
-  background-color: #e0e0e0;
-}
-
-.game-status {
-  text-align: center;
-  margin-bottom: 30px;
-  padding: 20px;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  border-radius: 12px;
-  color: white;
-}
-
-.game-status h2 {
-  margin: 0;
-  font-size: 1.5em;
-}
-
-.current-player {
-  font-weight: bold;
-  text-decoration: underline;
-}
-
-.scoreboard {
-  margin-bottom: 30px;
-}
-
-.scoreboard h3 {
-  color: #333;
-  margin-bottom: 15px;
-  font-size: 1.3em;
-}
-
-.scores {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.score-item {
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: all 0.3s;
-}
-
-.score-item.active {
-  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-  transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: #359268;
 }
 
 .player-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 15px;
+  color: #666;
 }
 
 .player-name {
+  font-weight: bold;
+}
+
+.player-role {
+  padding: 4px 12px;
+  background: #e3f2fd;
+  border-radius: 12px;
+  font-size: 0.9em;
+}
+
+.status-eliminated {
+  padding: 4px 12px;
+  background: #ffebee;
+  border-radius: 12px;
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.game-main {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+.left-panel, .right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.elevator-section {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.elevator-section h2 {
+  margin: 0 0 15px 0;
+  color: #333;
   font-size: 1.2em;
+}
+
+.elevator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 15px;
+}
+
+.floor-card {
+  position: relative;
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 15px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  overflow: hidden;
+}
+
+.floor-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.floor-card.revealed {
+  background: white;
+  border-color: #42b983;
+}
+
+.floor-card.fart-card.revealed {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+}
+
+.floor-card.big-fart.revealed {
+  border-color: #e74c3c;
+  box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
+}
+
+.floor-card.current-floor {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(66, 185, 131, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 15px rgba(66, 185, 131, 0);
+  }
+}
+
+.floor-number {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.card-content {
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.hidden-content {
+  color: #999;
+  font-size: 1.2em;
+  letter-spacing: 2px;
+}
+
+.revealed-content .card-name {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.big-fart-tip {
+  color: #e74c3c;
+  font-size: 0.85em;
+}
+
+.assassin-content .card-name {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.assassin-tip {
+  color: #999;
+  font-size: 0.85em;
+}
+
+.floor-status {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75em;
+  font-weight: bold;
+}
+
+.badge-hidden {
+  background: #e0e0e0;
+  color: #999;
+}
+
+.badge-no-fart {
+  background: #e8f5e9;
+  color: #4caf50;
+}
+
+.badge-small-fart {
+  background: #fff3e0;
+  color: #ff9800;
+}
+
+.badge-big-fart {
+  background: #ffebee;
+  color: #f44336;
+}
+
+.pulse-indicator {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  background: #42b983;
+  border-radius: 50%;
+  animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 2px solid #eee;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #333;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+}
+
+.btn-close:hover {
+  color: #666;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.effect-label {
+  font-weight: bold;
+  color: #555;
+  margin-bottom: 10px;
+}
+
+.effect-text {
+  background: #f5f5f5;
+  padding: 15px;
+  border-radius: 8px;
+  color: #333;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.card-details {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-item {
+  color: #666;
+}
+
+/* 玩家列表 */
+.players-section {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.players-section h2 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 1.2em;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.player-card {
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px;
+  transition: all 0.3s;
+}
+
+.player-card:hover {
+  transform: translateX(5px);
+}
+
+.player-card.me {
+  border-color: #42b983;
+  background: #f0f9f4;
+}
+
+.player-card.out {
+  opacity: 0.6;
+  background: #f5f5f5;
+}
+
+.player-card.out .player-name {
+  text-decoration: line-through;
+}
+
+.player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.player-name {
+  font-weight: bold;
+  color: #333;
+}
+
+.host-badge {
+  font-size: 1.2em;
+}
+
+.player-info {
+  display: grid;
+  gap: 4px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9em;
+}
+
+.info-row .label {
+  color: #666;
+}
+
+.info-row .value {
   color: #333;
   font-weight: 500;
 }
 
-.host-indicator {
-  font-size: 1.3em;
+.player-actions {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e0e0e0;
 }
 
-.turn-indicator {
-  margin-left: 5px;
-  color: #42b983;
-  font-weight: bold;
+.btn-eliminate {
+  width: 100%;
+  padding: 6px 12px;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.btn-eliminate:hover {
+  background: #d32f2f;
+}
+
+.players-empty {
+  text-align: center;
+  color: #999;
+  padding: 40px;
+}
+
+/* 控制面板 */
+.control-panel {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.control-panel h2 {
+  margin: 0 0 15px 0;
+  color: #333;
   font-size: 1.2em;
 }
 
-.score {
-  font-size: 2em;
-  font-weight: bold;
-  color: #42b983;
-}
-
-.actions {
+.host-controls {
   display: flex;
-  gap: 15px;
-  justify-content: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.btn {
-  padding: 12px 30px;
-  font-size: 1.1em;
+.btn-primary, .btn-secondary, .btn-settlement {
+  width: 100%;
+  padding: 12px 20px;
+  color: white;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
+  font-size: 1em;
+  font-weight: bold;
   transition: all 0.3s;
 }
 
-.btn-action {
-  background-color: #42b983;
+.btn-primary {
+  background: #2196f3;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1976d2;
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  background: #95a5a6;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #7f8c8d;
+}
+
+.btn-settlement {
+  background: #9c27b0;
+}
+
+.btn-settlement:hover:not(:disabled) {
+  background: #7b1fa2;
+}
+
+.btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.assassin-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn-assassin {
+  padding: 12px 20px;
+  background: #ff5722;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: bold;
+  transition: all 0.3s;
+}
+
+.btn-assassin:hover {
+  background: #e64a19;
+}
+
+.btn-assassin.active {
+  background: #ff9800;
+  box-shadow: 0 0 15px rgba(255, 152, 0, 0.5);
+  animation: activePulse 2s infinite;
+}
+
+@keyframes activePulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(255, 152, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 152, 0, 0.8);
+  }
+}
+
+.hint {
+  color: #999;
+  font-size: 0.85em;
+  text-align: center;
+  margin: 0;
+}
+
+.identity-selection {
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.identity-selection h3 {
+  margin: 0 0 10px 0;
+  color: #555;
+  font-size: 1em;
+}
+
+.identity-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.btn-identity {
+  padding: 10px;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: bold;
+  transition: all 0.3s;
+}
+
+.btn-identity:hover {
+  border-color: #42b983;
+  transform: translateY(-2px);
+}
+
+.btn-identity.assassin {
+  border-color: #ff5722;
+  color: #ff5722;
+}
+
+.btn-identity.assassin:hover {
+  background: #ff5722;
   color: white;
 }
 
-.btn-action:hover {
-  background-color: #359268;
+/* 游戏结果 */
+.result-section {
+  background: linear-gradient(135deg, #fff9e6 0%, #ffe6e6 100%);
+  padding: 30px;
+  border-radius: 12px;
+  text-align: center;
 }
 
+.result-banner {
+  margin-bottom: 30px;
+}
+
+.trophy {
+  font-size: 5em;
+  margin-bottom: 10px;
+  animation: trophyRotate 2s ease-in-out;
+}
+
+@keyframes trophyRotate {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-10deg);
+  }
+  75% {
+    transform: rotate(10deg);
+  }
+}
+
+.result-section h2 {
+  margin: 0 0 15px 0;
+  color: #856404;
+}
+
+.winner-text {
+  font-size: 1.8em;
+  font-weight: bold;
+  color: #856404;
+  margin-bottom: 15px;
+}
+
+.result-reason {
+  font-size: 1.1em;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.result-stats {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.result-stats h3 {
+  margin: 0 0 10px 0;
+  color: #555;
+}
+
+.result-stats ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.result-stats li {
+  padding: 8px 0;
+  color: #666;
+  border-bottom: 1px solid #eee;
+}
+
+.result-stats li:last-child {
+  border-bottom: none;
+}
+
+/* 退出按钮 */
 .btn-exit {
-  background-color: #dc3545;
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  padding: 15px 30px;
+  background: #f44336;
   color: white;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+  transition: all 0.3s;
 }
 
 .btn-exit:hover {
-  background-color: #c82333;
+  background: #d32f2f;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(244, 67, 54, 0.6);
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .game-main {
+    grid-template-columns: 1fr;
+  }
+
+  .right-panel {
+    order: -1;
+  }
+
+  .elevator-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  #game {
+    padding: 10px;
+  }
+
+  .game-header {
+    padding: 15px;
+  }
+
+  .game-header h1 {
+    font-size: 1.5em;
+  }
+
+  .elevator-section, .players-section, .control-panel {
+    padding: 15px;
+  }
+
+  .elevator-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+  }
+
+  .floor-card {
+    padding: 10px;
+  }
+
+  .floor-number {
+    font-size: 1.2em;
+  }
+
+  .card-content {
+    min-height: 60px;
+  }
+
+  .btn-exit {
+    bottom: 15px;
+    right: 15px;
+    padding: 12px 24px;
+  }
 }
 </style>
