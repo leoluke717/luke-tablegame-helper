@@ -9,7 +9,14 @@
       "Bash(git add src/views/LobbyView.vue)",
       "Bash(git push:*)",
       "Bash(git add src/views/HomeView.vue)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm run build:*)",
+      "Bash(/tmp/build.log)",
+      "Bash(npm run lint)",
+      "Bash(npm run 2:*)",
+      "Bash(/tmp/build_test.log)",
+      "Bash(/tmp/build_fix.log)"
     ],
     "deny": [],
     "ask": []

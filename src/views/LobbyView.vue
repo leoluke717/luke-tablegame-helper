@@ -138,6 +138,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { database } from '../firebase'
 import { ref as dbRef, onValue, set, update, remove } from 'firebase/database'
 import QRCode from 'qrcode'
+import { gameRegistry } from '../config/games'
 
 export default {
   name: 'LobbyView',
@@ -714,10 +715,7 @@ export default {
 
     // 游戏显示名称计算属性
     const displaySelectedGame = computed(() => {
-      const gameNames = {
-        'piZheXianZhi': '屁者先知'
-      }
-      return gameNames[selectedGame.value] || '未知游戏'
+      return gameRegistry.getGameName(selectedGame.value)
     })
 
     // 跳转到游戏设置页面
