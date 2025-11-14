@@ -181,6 +181,7 @@ export default {
   border-radius: 8px;
   cursor: pointer;
   font-weight: 500;
+  font-size: 1.15em;
   transition: all 0.3s;
 }
 

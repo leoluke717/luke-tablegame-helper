@@ -103,7 +103,7 @@ export default {
 }
 
 .player-status {
-  font-size: 1.2em;
+  font-size: 0.95em;
   color: #666;
   min-width: 30px;
   text-align: right;
