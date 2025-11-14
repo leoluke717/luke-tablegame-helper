@@ -3,7 +3,7 @@
     class="floor-card"
     :class="{
       'revealed': isRevealed,
-      'hidden': !isRevealed && !isAssassinViewing && !isAllFloorsRevealed,
+      'hidden': !isShow,
       'fart-card': card?.hasFart,
       'big-fart': isBigFart,
       'current-floor': isCurrentFloor
@@ -19,18 +19,14 @@
 
     <!-- 卡牌内容 -->
     <div class="card-content">
-      <div v-if="!isRevealed && !isAssassinViewing && !isAllFloorsRevealed" class="hidden-content">
+      <div v-if="!isShow" class="hidden-content">
         ████
       </div>
-      <div v-else-if="isRevealed || isAllFloorsRevealed" class="revealed-content">
+      <div v-else class="revealed-content">
         <div class="card-name">{{ card?.cardName }}</div>
         <div v-if="isBigFart" class="big-fart-tip">
           💥 可点击查看
         </div>
-      </div>
-      <div v-else-if="isAssassinViewing" class="assassin-content">
-        <div class="card-name">{{ card?.cardName }}</div>
-        <div class="assassin-tip">👁️ 屁者模式</div>
       </div>
     </div>
 
@@ -59,10 +55,6 @@ export default {
       type: Boolean,
       default: false
     },
-    isAllFloorsRevealed: {
-      type: Boolean,
-      default: false
-    },
     isCurrentFloor: {
       type: Boolean,
       default: false
@@ -74,10 +66,13 @@ export default {
   },
   emits: ['click-card'],
   computed: {
+    isShow() {
+      return this.isAssassinViewing || this.isRevealed
+    },
     badgeClass() {
       if (!this.card) return ''
 
-      if (!this.isRevealed && !this.isAssassinViewing && !this.isAllFloorsRevealed) {
+      if (!this.isShow) {
         return 'badge-hidden'
       }
 
@@ -90,7 +85,7 @@ export default {
     badgeText() {
       if (!this.card) return ''
 
-      if (!this.isRevealed && !this.isAssassinViewing && !this.isAllFloorsRevealed) {
+      if (!this.isShow) {
         return '未揭示'
       }
 
@@ -193,17 +188,6 @@ export default {
 
 .big-fart-tip {
   color: #e74c3c;
-  font-size: 0.85em;
-}
-
-.assassin-content .card-name {
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 5px;
-}
-
-.assassin-tip {
-  color: #999;
   font-size: 0.85em;
 }
 

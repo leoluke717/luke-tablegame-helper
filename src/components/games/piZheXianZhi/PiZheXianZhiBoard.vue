@@ -5,11 +5,11 @@
       <button
         v-if="isCurrentPlayerAssassin"
         class="btn-eye-small"
-        :class="{ 'active': isAllFloorsRevealed }"
-        @click="toggleAllFloorsReveal"
-        :title="isAllFloorsRevealed ? '隐藏全部楼层牌' : '揭示全部楼层牌'"
+        :class="{ 'active': isAssassinViewing }"
+        @click="$emit('toggle-assassin-view')"
+        :title="isAssassinViewing ? '退出偷看模式' : '进入偷看模式'"
       >
-        <span class="eye-icon">{{ isAllFloorsRevealed ? '🙈' : '👁️' }}</span>
+        <span class="eye-icon">{{ isAssassinViewing ? '🙈' : '👁️' }}</span>
       </button>
     </div>
     <div class="elevator-grid">
@@ -18,9 +18,8 @@
         :key="floor"
         :floor="floor"
         :card="getCard(floor)"
-        :is-revealed="getCard(floor)?.revealed || isAllFloorsRevealed"
+        :is-revealed="getCard(floor)?.revealed"
         :is-assassin-viewing="isAssassinViewing"
-        :is-all-floors-revealed="isAllFloorsRevealed"
         :is-current-floor="floor === nextFloorToReveal"
         :is-big-fart="isBigFartCard(floor)"
         @click-card="showCardEffect"
@@ -47,10 +46,6 @@ export default {
       type: Boolean,
       default: false
     },
-    isAllFloorsRevealed: {
-      type: Boolean,
-      default: false
-    },
     isCurrentPlayerAssassin: {
       type: Boolean,
       default: false
@@ -60,7 +55,7 @@ export default {
       default: null
     }
   },
-  emits: ['toggle-all-floors-reveal', 'show-card-effect'],
+  emits: ['show-card-effect', 'toggle-assassin-view'],
   computed: {
     sortedFloors() {
       return Object.keys(this.scenarioCards)
@@ -77,9 +72,6 @@ export default {
       if (!card) return false
       const cardInfo = CARD_EFFECTS[card.cardType]
       return cardInfo?.isBigFart || false
-    },
-    toggleAllFloorsReveal() {
-      this.$emit('toggle-all-floors-reveal')
     },
     showCardEffect(floor) {
       this.$emit('show-card-effect', floor)

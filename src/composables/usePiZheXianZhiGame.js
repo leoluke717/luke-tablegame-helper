@@ -307,9 +307,20 @@ export function usePiZheXianZhiGame(roomId) {
 
   /**
    * 设置游戏结果
+   * @param {Object|null} result - 游戏结果对象，null表示清除结果
    */
   const setGameResult = async (result) => {
     try {
+      if (result === null) {
+        // 清除游戏结果
+        await update(roomRef, {
+          gameResult: null,
+          status: GAME_STATUS.PLAYING  // 恢复游戏状态为进行中
+        })
+        console.log('✅ 游戏结果已清除')
+        return
+      }
+
       const gameResultData = {
         winner: result.winner,
         reason: result.reason,

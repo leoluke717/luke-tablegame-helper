@@ -4,6 +4,7 @@
 
     <div class="host-controls">
       <button
+        v-if="!hasUnreadyPlayers"
         class="btn-primary"
         @click="$emit('reveal-next-card')"
         :disabled="!nextFloorToReveal"
@@ -20,7 +21,7 @@
       </button>
 
       <!-- 玩家出局操作 -->
-      <div class="eliminate-section">
+      <div v-if="!hasUnreadyPlayers" class="eliminate-section">
         <label class="eliminate-label">让玩家出局：</label>
         <div class="player-selector">
           <button
@@ -130,6 +131,10 @@ export default {
           if (b.sequence === null || b.sequence === undefined) return -1
           return a.sequence - b.sequence
         })
+    },
+    hasUnreadyPlayers() {
+      // 检查是否有玩家未准备
+      return this.players.some(p => !p.ready)
     }
   },
   methods: {

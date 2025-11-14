@@ -16,7 +16,16 @@
       "Bash(npm run lint)",
       "Bash(npm run 2:*)",
       "Bash(/tmp/build_test.log)",
-      "Bash(/tmp/build_fix.log)"
+      "Bash(/tmp/build_fix.log)",
+      "Bash(curl:*)",
+      "Bash(npm ls:*)",
+      "Bash(kill:*)",
+      "Bash(git fetch:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:code.claude.com)",
+      "WebSearch",
+      "Bash(lsof:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

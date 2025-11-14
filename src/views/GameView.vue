@@ -16,11 +16,10 @@
           <PiZheXianZhiBoard
             :scenario-cards="scenarioCards"
             :is-assassin-viewing="isAssassinViewing"
-            :is-all-floors-revealed="isAllFloorsRevealed"
             :is-current-player-assassin="isCurrentPlayerAssassin"
             :next-floor-to-reveal="nextFloorToReveal"
-            @toggle-all-floors-reveal="toggleAllFloorsReveal"
             @show-card-effect="showCardEffect"
+            @toggle-assassin-view="toggleAssassinView"
           />
 
           <!-- 卡牌效果弹窗 -->
@@ -55,7 +54,7 @@
             v-if="roomData && roomData.status !== 'playing'"
             :can-reveal-cards="canRevealCards"
             :is-loading="isLoading"
-            @start-game="initGame(1)"
+            @start-game="handleStartGame"
           />
 
           <!-- 游戏控制面板（仅房主可见） -->
@@ -69,14 +68,7 @@
             @reveal-next-card="revealNextCard(myPlayerId)"
             @trigger-settlement="triggerSettlement(myPlayerId)"
             @eliminate-player="eliminateSelectedPlayer"
-            @restart-game="initGame(1)"
-          />
-
-          <!-- 游戏结果 -->
-          <PiZheXianZhiGameResult
-            v-if="gameResult"
-            :game-result="gameResult"
-            @exit-game="exitGame"
+            @restart-game="handleRestartGame"
           />
         </div>
       </div>
@@ -86,6 +78,15 @@
         🚪 退出游戏
       </button>
     </div>
+
+    <!-- 游戏结果悬浮窗 -->
+    <PiZheXianZhiGameResult
+      v-if="roomData?.status === 'finished' && gameResult"
+      :game-result="gameResult"
+      :players="players"
+      @exit-game="exitGame"
+      @close-result="closeResult"
+    />
   </div>
 </template>
 
@@ -97,6 +98,7 @@ import { ref as dbRef, update } from 'firebase/database'
 import { usePiZheXianZhiGame } from '../composables/usePiZheXianZhiGame'
 import { PLAYER_IDENTITY } from '../config/games/piZheXianZhiDataModel'
 import { CARD_EFFECTS } from '../config/games/piZheXianZhiCardEffects'
+import { getCardByFloor } from '../config/games/piZheXianZhiCardGenerator'
 
 // 子组件
 import PiZheXianZhiHeader from '../components/games/piZheXianZhi/PiZheXianZhiHeader.vue'
@@ -130,7 +132,6 @@ export default {
 
     // 本地状态
     const isAssassinViewing = ref(false)
-    const isAllFloorsRevealed = ref(false)
     const selectedCard = ref(null)
     const myPlayerId = ref(localStorage.getItem('playerId') || '')
     const selectedSequence = ref(null)
@@ -153,7 +154,8 @@ export default {
       selectPlayerIdentity,
       isHost,
       isAssassin,
-      cleanup
+      cleanup,
+      setGameResult
     } = gameLogic
 
     // 计算属性
@@ -189,16 +191,10 @@ export default {
       const card = getCard(floor)
       if (!card) return
 
-      // 大屁牌可以点击查看效果
-      if (card.revealed && isBigFartCard(floor)) {
+      // 只有显示内容（已揭示或偷看模式）且是大屁牌时才能查看
+      const isShow = isAssassinViewing.value || card.revealed
+      if (isShow && isBigFartCard(floor)) {
         selectedCard.value = card
-        return
-      }
-
-      // 屁者在查看模式可以查看所有牌
-      if (isAssassinViewing.value) {
-        selectedCard.value = card
-        return
       }
     }
 
@@ -210,10 +206,43 @@ export default {
       isAssassinViewing.value = !isAssassinViewing.value
     }
 
-    const toggleAllFloorsReveal = () => {
-      isAllFloorsRevealed.value = !isAllFloorsRevealed.value
-      // 关闭屁者查看模式
+    // 获取场景牌
+    const getCard = (floor) => {
+      return getCardByFloor(scenarioCards.value, floor)
+    }
+
+    // 检查是否是大屁牌
+    const isBigFartCard = (floor) => {
+      const card = getCard(floor)
+      if (!card) return false
+      const cardInfo = CARD_EFFECTS[card.cardType]
+      return cardInfo?.isBigFart || false
+    }
+
+    // 重置游戏状态
+    const resetGameState = () => {
+      selectedSequence.value = null
+      selectedIdentity.value = null
+      selectedPlayerToEliminate.value = null
       isAssassinViewing.value = false
+      selectedCard.value = null  // 关闭卡牌详情弹窗
+    }
+
+    // 开始游戏
+    const handleStartGame = async () => {
+      await initGame(1)
+      resetGameState()
+    }
+
+    // 重新开始游戏
+    const handleRestartGame = async () => {
+      // 确认弹框
+      if (!confirm('确定要重新开始游戏吗？这将重置所有玩家的身份和序号！')) {
+        return
+      }
+
+      await initGame(1)
+      resetGameState()
     }
 
     // 让选中的玩家出局
@@ -292,6 +321,13 @@ export default {
       }
     }
 
+    const closeResult = async () => {
+      console.log('💡 GameView收到close-result事件')
+      // 仅本地清除游戏结果，不更新Firebase
+      gameResult.value = null
+      console.log('✅ 游戏结果窗口已关闭')
+    }
+
     const exitGame = async () => {
       if (!confirm('确定要退出游戏吗？房主退出将导致所有玩家一起返回大厅')) {
         return
@@ -334,7 +370,7 @@ export default {
       // 重置本地选择状态
       selectedSequence.value = null
       selectedIdentity.value = null
-      isAllFloorsRevealed.value = false
+      isAssassinViewing.value = false
 
       // 如果房间状态是 playing 且当前是房主，自动初始化游戏
       // 等待players加载完成后再初始化
@@ -342,10 +378,11 @@ export default {
         console.log('🎮 检测到游戏已开始，等待数据加载完成...')
 
         // 使用 setTimeout 确保players数组已加载
-        const checkAndInit = () => {
+        const checkAndInit = async () => {
           if (players.value.length > 0) {
             console.log('👥 玩家数据已加载，开始初始化游戏...')
-            initGame(1) // 使用默认的1张大屁牌
+            await initGame(1) // 使用默认的1张大屁牌
+            resetGameState() // 重置游戏状态
           } else {
             console.log('⏳ 等待玩家数据加载...')
             setTimeout(checkAndInit, 100)
@@ -405,6 +442,21 @@ export default {
       }
     }, { deep: true, immediate: true })
 
+    // 监听玩家列表变化，检测游戏重新开始
+    watch(() => players.value, (newPlayers, oldPlayers) => {
+      // 检查是否所有玩家身份都被重置（null 或 undefined）
+      const allIdentitiesCleared = newPlayers.every(p => !p.identity)
+
+      // 检查之前是否有玩家已选择身份
+      const hadIdentitiesBefore = oldPlayers?.some(p => p.identity)
+
+      // 如果之前有身份，现在全被重置，说明游戏重新开始了
+      if (allIdentitiesCleared && hadIdentitiesBefore) {
+        console.log('🎮 检测到游戏重新开始，重置本地状态')
+        resetGameState()
+      }
+    }, { deep: true })
+
     return {
       roomId,
       roomData,
@@ -419,7 +471,6 @@ export default {
       isCurrentPlayerAssassin,
       myPlayerId,
       isAssassinViewing,
-      isAllFloorsRevealed,
       selectedCard,
       selectedSequence,
       selectedIdentity,
@@ -431,12 +482,14 @@ export default {
       eliminatePlayer,
       eliminateSelectedPlayer,
       initGame,
+      handleStartGame,
+      handleRestartGame,
       toggleAssassinView,
-      toggleAllFloorsReveal,
       confirmSelection,
       selectIdentity,
       showCardEffect,
       closeModal,
+      closeResult,
       exitGame
     }
   }
