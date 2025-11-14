@@ -22,16 +22,43 @@
       <!-- 玩家出局操作 -->
       <div class="eliminate-section">
         <label class="eliminate-label">让玩家出局：</label>
-        <select v-model="selectedPlayerId" class="eliminate-select">
-          <option :value="null">选择玩家...</option>
-          <option
-            v-for="player in availablePlayers"
-            :key="player.id"
-            :value="player.id"
+        <div class="player-selector">
+          <button
+            class="btn-select-player"
+            @click="showPlayerList = !showPlayerList"
+            :class="{ active: showPlayerList }"
           >
-            ({{ player.sequence || '?' }}号) {{ player.name }}
-          </option>
-        </select>
+            <span v-if="!selectedPlayerId">选择玩家...</span>
+            <span v-else>
+              ({{ getPlayerSequence(selectedPlayerId) || '?' }}号) {{ getPlayerName(selectedPlayerId) }}
+            </span>
+            <span class="arrow" :class="{ expanded: showPlayerList }">▼</span>
+          </button>
+
+          <!-- 玩家选择列表（弹窗样式） -->
+          <div v-if="showPlayerList" class="player-list-overlay" @click="showPlayerList = false">
+            <div class="player-list" @click.stop>
+              <div class="player-list-header">
+                <h3>选择要出局的玩家</h3>
+                <button class="btn-close" @click="showPlayerList = false">✕</button>
+              </div>
+              <div class="player-list-content">
+                <PiZheXianZhiPlayerItem
+                  v-for="player in availablePlayers"
+                  :key="player.id"
+                  :player="player"
+                  :clickable="true"
+                  :is-me="player.id === myPlayerId"
+                  @click="selectPlayer(player.id)"
+                />
+                <div v-if="availablePlayers.length === 0" class="no-players">
+                  暂无可选择的玩家
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button
           class="btn-eliminate"
           @click="$emit('eliminate-player', selectedPlayerId)"
@@ -53,8 +80,13 @@
 </template>
 
 <script>
+import PiZheXianZhiPlayerItem from './PiZheXianZhiPlayerItem.vue'
+
 export default {
   name: 'HostControlPanel',
+  components: {
+    PiZheXianZhiPlayerItem
+  },
   props: {
     players: {
       type: Array,
@@ -80,12 +112,45 @@ export default {
   emits: ['reveal-next-card', 'trigger-settlement', 'eliminate-player', 'restart-game'],
   data() {
     return {
-      selectedPlayerId: null
+      selectedPlayerId: null,
+      showPlayerList: false
     }
   },
   computed: {
     availablePlayers() {
-      return this.players.filter(p => p.status !== 'out' && p.id !== this.myPlayerId)
+      // 只显示未出局、已准备的玩家（包括房主自己），并按序号排序
+      return this.players
+        .filter(p =>
+          p.status !== 'out' &&
+          p.ready === true
+        )
+        .sort((a, b) => {
+          // 按序号排序，空值放在最后
+          if (a.sequence === null || a.sequence === undefined) return 1
+          if (b.sequence === null || b.sequence === undefined) return -1
+          return a.sequence - b.sequence
+        })
+    }
+  },
+  methods: {
+    selectPlayer(playerId) {
+      this.selectedPlayerId = playerId
+      this.showPlayerList = false
+    },
+    getPlayerName(playerId) {
+      const player = this.players.find(p => p.id === playerId)
+      return player ? player.name : ''
+    },
+    getPlayerSequence(playerId) {
+      const player = this.players.find(p => p.id === playerId)
+      return player ? player.sequence : null
+    },
+    handleClickOutside(event) {
+      // 点击外部关闭弹窗
+      const selector = this.$el.querySelector('.player-selector')
+      if (selector && !selector.contains(event.target)) {
+        this.showPlayerList = false
+      }
     }
   },
   watch: {
@@ -95,7 +160,19 @@ export default {
         this.selectedPlayerId = null
       },
       deep: true
+    },
+    showPlayerList(newVal) {
+      // 监听弹窗显示状态，添加/移除点击外部监听
+      if (newVal) {
+        document.addEventListener('click', this.handleClickOutside)
+      } else {
+        document.removeEventListener('click', this.handleClickOutside)
+      }
     }
+  },
+  beforeUnmount() {
+    // 组件销毁时清理事件监听
+    document.removeEventListener('click', this.handleClickOutside)
   }
 }
 </script>
@@ -180,49 +257,142 @@ export default {
   font-size: 0.95em;
 }
 
-.eliminate-select {
+/* 玩家选择器 */
+.player-selector {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.btn-select-player {
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px 15px;
   border: 2px solid #e57373;
-  border-radius: 6px;
+  border-radius: 8px;
   background: white;
-  font-size: 0.95em;
   color: #333;
+  font-size: 1em;
+  text-align: left;
   cursor: pointer;
   transition: all 0.3s;
-  margin-bottom: 10px;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 35px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.eliminate-select:hover {
+.btn-select-player:hover {
   border-color: #e53935;
-  box-shadow: 0 2px 4px rgba(229, 57, 53, 0.2);
+  box-shadow: 0 2px 8px rgba(229, 57, 53, 0.2);
 }
 
-.eliminate-select:focus {
-  outline: none;
+.btn-select-player.active {
   border-color: #e53935;
   box-shadow: 0 0 0 3px rgba(229, 57, 53, 0.1);
 }
 
-.eliminate-select option {
-  padding: 8px;
+.btn-select-player .arrow {
+  font-size: 0.8em;
+  transition: transform 0.3s;
+  color: #666;
+}
+
+.btn-select-player .arrow.expanded {
+  transform: rotate(180deg);
+}
+
+/* 玩家列表覆盖层 */
+.player-list-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* 玩家列表弹窗 */
+.player-list {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 450px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.player-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 2px solid #ffcdd2;
+}
+
+.player-list-header h3 {
+  margin: 0;
+  color: #c62828;
+  font-size: 1.3em;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  color: #999;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: all 0.3s;
+}
+
+.btn-close:hover {
+  background: #f5f5f5;
   color: #333;
+}
+
+.player-list-content {
+  padding: 10px;
+  overflow-y: auto;
+  max-height: calc(70vh - 100px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.no-players {
+  text-align: center;
+  padding: 30px;
+  color: #999;
+  font-size: 1em;
 }
 
 .eliminate-section .btn-eliminate {
   width: 100%;
-  padding: 10px 20px;
+  padding: 12px 20px;
   background: linear-gradient(135deg, #e53935 0%, #c62828 100%);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.95em;
+  font-size: 1em;
   font-weight: 600;
   transition: all 0.3s;
   box-shadow: 0 2px 4px rgba(229, 57, 53, 0.3);

@@ -2,20 +2,12 @@
   <section class="players-section">
     <h2>👥 玩家 ({{ players.length }}人)</h2>
     <div class="players-list">
-      <div
+      <PiZheXianZhiPlayerItem
         v-for="player in sortedPlayers"
         :key="player.id"
-        class="player-item"
-        :class="{ 'out': player.status === 'out', 'me': player.id === myPlayerId }"
-      >
-        <div class="player-avatar">{{ player.avatar || '😊' }}</div>
-        <div class="player-name">
-          <span class="player-sequence">({{ player.sequence || '?' }}号)</span>
-          {{ player.name }}
-        </div>
-        <div class="player-status" v-if="player.status === 'out'">💀</div>
-        <div class="player-status not-ready" v-else-if="!player.ready && !player.identity">未准备</div>
-      </div>
+        :player="player"
+        :is-me="player.id === myPlayerId"
+      />
       <div v-if="players.length === 0" class="players-empty">
         等待玩家加入...
       </div>
@@ -24,8 +16,13 @@
 </template>
 
 <script>
+import PiZheXianZhiPlayerItem from './PiZheXianZhiPlayerItem.vue'
+
 export default {
   name: 'PlayerList',
+  components: {
+    PiZheXianZhiPlayerItem
+  },
   props: {
     players: {
       type: Array,
@@ -76,73 +73,5 @@ export default {
   text-align: center;
   color: #999;
   padding: 40px;
-}
-
-.player-item {
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
-  transition: all 0.3s;
-}
-
-.player-item:hover {
-  transform: translateX(5px);
-}
-
-.player-item.me {
-  border-color: #42b983;
-  background: #f0f9f4;
-}
-
-.player-item.out {
-  opacity: 0.5;
-  background-color: #e9ecef;
-}
-
-.player-item.out .player-name {
-  text-decoration: line-through;
-  color: #999;
-}
-
-.player-avatar {
-  font-size: 1.8em;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 2px solid #42b983;
-  background-color: #fff;
-  overflow: hidden;
-  text-align: center;
-  margin-right: 12px;
-  flex-shrink: 0;
-}
-
-.player-name {
-  flex: 1;
-  font-weight: 500;
-  color: #333;
-}
-
-.player-status {
-  font-size: 1.2em;
-  color: #666;
-}
-
-.player-status.not-ready {
-  color: #dc3545;
-  font-weight: 500;
-}
-
-.player-sequence {
-  font-weight: bold;
-  color: #42b983;
-  margin-right: 6px;
 }
 </style>
