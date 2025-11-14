@@ -2,15 +2,26 @@
   <section class="elevator-section">
     <div class="elevator-header">
       <h2>🏢 电梯楼层 ({{ sortedFloors.length }}张牌)</h2>
-      <button
-        v-if="isCurrentPlayerAssassin"
-        class="btn-eye-small"
-        :class="{ 'active': isAssassinViewing }"
-        @click="$emit('toggle-assassin-view')"
-        :title="isAssassinViewing ? '退出偷看模式' : '进入偷看模式'"
-      >
-        <span class="eye-icon">{{ isAssassinViewing ? '🙈' : '👁️' }}</span>
-      </button>
+      <div class="header-buttons">
+        <button
+          v-if="skill.canUseSkill.value"
+          class="btn-skill"
+          :class="{ 'active': skill.skillModeActive.value }"
+          @click="skill.activateSkillMode"
+          title="使用技能查看楼层牌"
+        >
+          🔮 释放技能
+        </button>
+        <button
+          v-if="isCurrentPlayerAssassin"
+          class="btn-eye-small"
+          :class="{ 'active': isAssassinViewing }"
+          @click="$emit('toggle-assassin-view')"
+          :title="isAssassinViewing ? '退出偷看模式' : '进入偷看模式'"
+        >
+          <span class="eye-icon">{{ isAssassinViewing ? '🙈' : '👁️' }}</span>
+        </button>
+      </div>
     </div>
     <div class="elevator-grid">
       <FloorCard
@@ -20,17 +31,22 @@
         :card="getCard(floor)"
         :is-revealed="getCard(floor)?.revealed"
         :is-assassin-viewing="isAssassinViewing"
+        :is-skill-viewing="skill.isFloorBeingViewed(floor)"
+        :is-skill-mode-active="skill.skillModeActive.value"
         :is-current-floor="floor === nextFloorToReveal"
         :is-big-fart="isBigFartCard(floor)"
-        @click-card="showCardEffect"
+        @click-card="handleCardClick"
+        @use-skill-on-floor="handleSkillUse"
       />
     </div>
   </section>
 </template>
 
 <script>
+import { computed } from 'vue'
 import FloorCard from './PiZheXianZhiFloorCard.vue'
 import { CARD_EFFECTS } from '../../../config/games/piZheXianZhiCardEffects'
+import { useSkill } from '../../../composables/useSkill'
 
 export default {
   name: 'GameBoard',
@@ -53,28 +69,63 @@ export default {
     nextFloorToReveal: {
       type: Number,
       default: null
+    },
+    gameLogic: {
+      type: Object,
+      required: true
+    },
+    myPlayerId: {
+      type: String,
+      required: true
+    },
+    roomId: {
+      type: String,
+      required: true
     }
   },
   emits: ['show-card-effect', 'toggle-assassin-view'],
-  computed: {
-    sortedFloors() {
-      return Object.keys(this.scenarioCards)
+  setup(props, { emit }) {
+    const skill = useSkill(props.gameLogic, props.myPlayerId, props.roomId)
+
+    const sortedFloors = computed(() => {
+      return Object.keys(props.scenarioCards)
         .map(Number)
         .sort((a, b) => a - b)
+    })
+
+    const getCard = (floor) => {
+      return props.scenarioCards[floor]
     }
-  },
-  methods: {
-    getCard(floor) {
-      return this.scenarioCards[floor]
-    },
-    isBigFartCard(floor) {
-      const card = this.getCard(floor)
+
+    const isBigFartCard = (floor) => {
+      const card = getCard(floor)
       if (!card) return false
       const cardInfo = CARD_EFFECTS[card.cardType]
       return cardInfo?.isBigFart || false
-    },
-    showCardEffect(floor) {
-      this.$emit('show-card-effect', floor)
+    }
+
+    const handleCardClick = (floor) => {
+      // 如果技能模式激活，使用技能查看楼层
+      if (skill.skillModeActive.value) {
+        skill.useSkillOnFloor(floor)
+        return
+      }
+
+      // 否则发送事件给父组件显示卡牌效果
+      emit('show-card-effect', floor)
+    }
+
+    const handleSkillUse = (floor) => {
+      skill.useSkillOnFloor(floor)
+    }
+
+    return {
+      skill,
+      sortedFloors,
+      getCard,
+      isBigFartCard,
+      handleCardClick,
+      handleSkillUse
     }
   }
 }
@@ -98,7 +149,36 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 15px;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-skill {
+  padding: 8px 12px;
+  border: 2px solid #8e44ad;
+  background-color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95em;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-skill:hover {
+  background-color: #8e44ad;
+  color: #fff;
+}
+
+.btn-skill.active {
+  background-color: #8e44ad;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(142, 68, 173, 0.3);
 }
 
 .btn-eye-small {
@@ -141,5 +221,6 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 15px;
+  margin-top: 15px; /* 固定上边距，保持标题和楼层卡片的垂直间距恒定 */
 }
 </style>

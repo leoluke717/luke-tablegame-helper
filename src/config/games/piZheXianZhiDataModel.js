@@ -64,7 +64,10 @@ export const ROOM_DATA_MODEL = {
       passengersAlive: 0,                 // 存活乘客数量
       fartCardsRevealed: 0                // 揭示的有屁牌数量
     }
-  }
+  },
+
+  // 技能系统状态
+  skillViewing: null  // 当前正在查看的楼层（临时查看技能用）
 }
 
 /**
@@ -80,7 +83,14 @@ export const PLAYER_DATA_MODEL = {
   avatar: "😊",                    // 头像Emoji
   score: 0,                        // 得分（暂未使用，为扩展预留）
   joinedAt: 1702345678901,         // 加入时间戳
-  isOnline: true                   // 在线状态
+  isOnline: true,                  // 在线状态
+
+  // 技能系统
+  skill: {
+    hasSkill: false,               // 是否有技能
+    skillType: null,               // 技能类型：'viewFloor' 或 null
+    skillUsed: false               // 技能是否已使用
+  }
 }
 
 /**

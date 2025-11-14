@@ -42,6 +42,18 @@
         </div>
       </div>
 
+      <!-- 技能选择 -->
+      <div class="skill-selection-block">
+        <label class="label">选择技能（可选）：</label>
+        <select
+          v-model="localSkillType"
+          class="skill-select"
+        >
+          <option :value="SKILL_TYPES.NO_SKILL">🚫 无技能</option>
+          <option :value="SKILL_TYPES.VIEW_FLOOR">🔮 查看楼层牌</option>
+        </select>
+      </div>
+
       <!-- 准备按钮 -->
       <button
         class="btn-ready"
@@ -55,7 +67,9 @@
 </template>
 
 <script>
+import { ref, watch } from 'vue'
 import { PLAYER_IDENTITY } from '../../../config/games/piZheXianZhiDataModel'
+import { SKILL_TYPES } from '../../../config/skills'
 
 export default {
   name: 'IdentitySelection',
@@ -72,20 +86,39 @@ export default {
       type: String,
       default: null
     },
+    selectedSkillType: {
+      type: String,
+      default: SKILL_TYPES.NO_SKILL
+    },
     myPlayerId: {
       type: String,
       required: true
     }
   },
-  emits: ['update:selectedSequence', 'update:selectedIdentity', 'confirm-selection'],
-  setup(props) {
+  emits: ['update:selectedSequence', 'update:selectedIdentity', 'update:selectedSkillType', 'confirm-selection'],
+  setup(props, { emit }) {
     const isSequenceTaken = (sequence) => {
       return props.players.some(p => p.sequence === sequence && p.id !== props.myPlayerId)
     }
 
+    // 本地技能类型状态（用于下拉菜单的 v-model）
+    const localSkillType = ref(props.selectedSkillType)
+
+    // 监听父组件传入的 selectedSkillType 变化
+    watch(() => props.selectedSkillType, (newVal) => {
+      localSkillType.value = newVal
+    })
+
+    // 监听本地技能类型变化，同步到父组件
+    watch(localSkillType, (newVal) => {
+      emit('update:selectedSkillType', newVal)
+    })
+
     return {
       PLAYER_IDENTITY,
-      isSequenceTaken
+      SKILL_TYPES,
+      isSequenceTaken,
+      localSkillType
     }
   }
 }
@@ -123,7 +156,8 @@ export default {
 }
 
 .sequence-selection-block,
-.identity-selection-block {
+.identity-selection-block,
+.skill-selection-block {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -145,6 +179,34 @@ export default {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.skill-selection-block .skill-select {
+  width: 100%;
+  padding: 12px 20px;
+  border: 2px solid #8e44ad;
+  background-color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 1.1em;
+  transition: all 0.3s;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e44ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 40px;
+}
+
+.skill-select:focus {
+  outline: none;
+  border-color: #8e44ad;
+  box-shadow: 0 0 0 3px rgba(142, 68, 173, 0.1);
+}
+
+.skill-select:hover {
+  border-color: #8e44ad;
 }
 
 .btn-sequence {

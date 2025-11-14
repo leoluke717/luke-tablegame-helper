@@ -18,6 +18,9 @@
             :is-assassin-viewing="isAssassinViewing"
             :is-current-player-assassin="isCurrentPlayerAssassin"
             :next-floor-to-reveal="nextFloorToReveal"
+            :game-logic="gameLogic"
+            :my-player-id="myPlayerId"
+            :room-id="roomId"
             @show-card-effect="showCardEffect"
             @toggle-assassin-view="toggleAssassinView"
           />
@@ -43,9 +46,11 @@
             :players="players"
             :selected-sequence="selectedSequence"
             :selected-identity="selectedIdentity"
+            :selected-skill-type="selectedSkillType"
             :my-player-id="myPlayerId"
             @update:selected-sequence="selectedSequence = $event"
             @update:selected-identity="selectedIdentity = $event"
+            @update:selected-skill-type="selectedSkillType = $event"
             @confirm-selection="confirmSelection"
           />
 
@@ -97,6 +102,7 @@ import { database } from '../firebase'
 import { ref as dbRef, update } from 'firebase/database'
 import { usePiZheXianZhiGame } from '../composables/usePiZheXianZhiGame'
 import { PLAYER_IDENTITY } from '../config/games/piZheXianZhiDataModel'
+import { SKILL_TYPES } from '../config/skills'
 import { CARD_EFFECTS } from '../config/games/piZheXianZhiCardEffects'
 import { getCardByFloor } from '../config/games/piZheXianZhiCardGenerator'
 
@@ -136,6 +142,7 @@ export default {
     const myPlayerId = ref(localStorage.getItem('playerId') || '')
     const selectedSequence = ref(null)
     const selectedIdentity = ref(null)
+    const selectedSkillType = ref(SKILL_TYPES.NO_SKILL)
     const selectedPlayerToEliminate = ref(null)
 
     // 从 gameLogic 获取数据
@@ -223,6 +230,7 @@ export default {
     const resetGameState = () => {
       selectedSequence.value = null
       selectedIdentity.value = null
+      selectedSkillType.value = SKILL_TYPES.NO_SKILL
       selectedPlayerToEliminate.value = null
       isAssassinViewing.value = false
       selectedCard.value = null  // 关闭卡牌详情弹窗
@@ -230,7 +238,10 @@ export default {
 
     // 开始游戏
     const handleStartGame = async () => {
-      await initGame(1)
+      // 从Firebase读取bigFartCount设置
+      const bigFartCount = roomData.value?.settings?.bigFartCount || 1
+      console.log(`🎮 开始游戏，读取大屁牌数量: ${bigFartCount}`)
+      await initGame(bigFartCount)
       resetGameState()
     }
 
@@ -241,7 +252,10 @@ export default {
         return
       }
 
-      await initGame(1)
+      // 从Firebase读取bigFartCount设置
+      const bigFartCount = roomData.value?.settings?.bigFartCount || 1
+      console.log(`🔄 重新开始游戏，读取大屁牌数量: ${bigFartCount}`)
+      await initGame(bigFartCount)
       resetGameState()
     }
 
@@ -292,17 +306,23 @@ export default {
       }
 
       try {
-        // 更新玩家序号和身份
+        // 更新玩家序号、身份和技能
         const playerRef = dbRef(database, `rooms/${roomId}/players/${myPlayerId.value}`)
         await update(playerRef, {
           sequence: selectedSequence.value,
           identity: selectedIdentity.value,
+          skill: {
+            hasSkill: selectedSkillType.value !== SKILL_TYPES.NO_SKILL,
+            skillType: selectedSkillType.value,
+            skillUsed: false
+          },
           ready: true
         })
 
         // 重置选择状态
         selectedSequence.value = null
         selectedIdentity.value = null
+        selectedSkillType.value = SKILL_TYPES.NO_SKILL
       } catch (err) {
         alert('确认选择失败: ' + err.message)
       }
@@ -370,21 +390,25 @@ export default {
       // 重置本地选择状态
       selectedSequence.value = null
       selectedIdentity.value = null
+      selectedSkillType.value = SKILL_TYPES.NO_SKILL
       isAssassinViewing.value = false
 
       // 如果房间状态是 playing 且当前是房主，自动初始化游戏
-      // 等待players加载完成后再初始化
+      // 等待players和roomData加载完成后再初始化
       if (roomData.value?.status === 'playing' && canRevealCards.value) {
         console.log('🎮 检测到游戏已开始，等待数据加载完成...')
 
-        // 使用 setTimeout 确保players数组已加载
+        // 使用 setTimeout 确保players数组和roomData已加载
         const checkAndInit = async () => {
-          if (players.value.length > 0) {
-            console.log('👥 玩家数据已加载，开始初始化游戏...')
-            await initGame(1) // 使用默认的1张大屁牌
+          if (players.value.length > 0 && roomData.value) {
+            console.log('👥 玩家数据和房间数据已加载，开始初始化游戏...')
+            // 从Firebase读取bigFartCount设置
+            const bigFartCount = roomData.value?.settings?.bigFartCount || 1
+            console.log(`🎮 读取大屁牌数量: ${bigFartCount}`)
+            await initGame(bigFartCount)
             resetGameState() // 重置游戏状态
           } else {
-            console.log('⏳ 等待玩家数据加载...')
+            console.log('⏳ 等待数据加载...')
             setTimeout(checkAndInit, 100)
           }
         }
@@ -474,6 +498,8 @@ export default {
       selectedCard,
       selectedSequence,
       selectedIdentity,
+      selectedSkillType,
+      SKILL_TYPES,
       PLAYER_IDENTITY,
       getRoleText,
       copyRoomId,
@@ -481,6 +507,7 @@ export default {
       triggerSettlement,
       eliminatePlayer,
       eliminateSelectedPlayer,
+      gameLogic,
       initGame,
       handleStartGame,
       handleRestartGame,

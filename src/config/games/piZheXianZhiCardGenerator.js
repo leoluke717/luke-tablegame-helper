@@ -7,18 +7,21 @@ import { CARD_EFFECTS, getBigFartCardTypes } from './piZheXianZhiCardEffects'
 
 /**
  * 生成8张场景牌
- * @param {number} bigFartCount - 大屁牌数量 (0-4)
+ * @param {number} bigFartCount - 大屁牌数量 (0-5，不重复)
  * @returns {Object} 8张场景牌对象，键为楼层号(1-8)
  *
  * @example
- * // 生成1张大屁牌（自动3张小屁牌）
- * const cards = generateScenarioCards(1)
+ * // 生成2张大屁牌（自动2张小屁牌，4张无屁牌）
+ * const cards = generateScenarioCards(2)
  * // 返回: { 1: {...}, 2: {...}, ..., 8: {...} }
  */
 export function generateScenarioCards(bigFartCount) {
-  // 验证输入
-  if (bigFartCount < 0 || bigFartCount > 4) {
-    throw new Error(`大屁牌数量必须在0-4之间，当前值: ${bigFartCount}`)
+  // 获取大屁牌类型数量
+  const bigFartTypes = getBigFartCardTypes()
+
+  // 验证输入 - 大屁牌数量不能超过可用类型数量（不重复）
+  if (bigFartCount < 0 || bigFartCount > bigFartTypes.length) {
+    throw new Error(`大屁牌数量必须在0-${bigFartTypes.length}之间，当前值: ${bigFartCount}`)
   }
 
   // 计算小屁牌数量
@@ -37,11 +40,11 @@ export function generateScenarioCards(bigFartCount) {
     cards.push(createCard('有屁'))
   }
 
-  // 3. 生成大屁牌（随机选择类型）
-  const bigFartTypes = getBigFartCardTypes()
+  // 3. 生成大屁牌（不重复随机选择类型）
+  // 洗牌大屁牌类型数组，然后取前bigFartCount个（保证不重复）
+  const shuffledBigFartTypes = shuffleArray([...bigFartTypes])
   for (let i = 0; i < bigFartCount; i++) {
-    const randomType = bigFartTypes[Math.floor(Math.random() * bigFartTypes.length)]
-    cards.push(createCard(randomType))
+    cards.push(createCard(shuffledBigFartTypes[i]))
   }
 
   // 4. 随机打乱并分配楼层

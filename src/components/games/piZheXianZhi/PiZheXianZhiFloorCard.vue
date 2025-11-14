@@ -6,9 +6,12 @@
       'hidden': !isShow,
       'fart-card': card?.hasFart,
       'big-fart': isBigFart,
-      'current-floor': isCurrentFloor
+      'current-floor': isCurrentFloor,
+      'skill-viewing': isSkillViewing,
+      'assassin-viewing': isAssassinViewing,
+      'skill-mode-active': isSkillModeActive && !isRevealed
     }"
-    @click="$emit('click-card', floor)"
+    @click="handleClick"
   >
     <div class="floor-header">
       <div class="floor-number">{{ floor }}F</div>
@@ -27,11 +30,19 @@
         <div v-if="isBigFart" class="big-fart-tip">
           💥 可点击查看
         </div>
+        <div v-if="isSkillViewing" class="skill-viewing-tip">
+          🔮 技能查看中
+        </div>
       </div>
     </div>
 
     <!-- 当前楼层指示器 -->
     <div v-if="isCurrentFloor" class="pulse-indicator"></div>
+
+    <!-- 技能模式提示 -->
+    <div v-if="isSkillModeActive && !isRevealed" class="skill-tip">
+      点击使用技能
+    </div>
   </div>
 </template>
 
@@ -55,6 +66,14 @@ export default {
       type: Boolean,
       default: false
     },
+    isSkillViewing: {
+      type: Boolean,
+      default: false
+    },
+    isSkillModeActive: {
+      type: Boolean,
+      default: false
+    },
     isCurrentFloor: {
       type: Boolean,
       default: false
@@ -64,10 +83,19 @@ export default {
       default: false
     }
   },
-  emits: ['click-card'],
+  emits: ['click-card', 'use-skill-on-floor'],
+  methods: {
+    handleClick() {
+      if (this.isSkillModeActive && !this.isRevealed) {
+        this.$emit('use-skill-on-floor', this.floor)
+      } else {
+        this.$emit('click-card', this.floor)
+      }
+    }
+  },
   computed: {
     isShow() {
-      return this.isAssassinViewing || this.isRevealed
+      return this.isAssassinViewing || this.isRevealed || this.isSkillViewing
     },
     badgeClass() {
       if (!this.card) return ''
@@ -126,7 +154,25 @@ export default {
   background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
 }
 
+.floor-card.fart-card.assassin-viewing {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+}
+
+.floor-card.fart-card.skill-viewing {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+}
+
 .floor-card.big-fart.revealed {
+  border-color: #e74c3c;
+  box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
+}
+
+.floor-card.big-fart.assassin-viewing {
+  border-color: #e74c3c;
+  box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
+}
+
+.floor-card.big-fart.skill-viewing {
   border-color: #e74c3c;
   box-shadow: 0 0 15px rgba(231, 76, 60, 0.3);
 }
@@ -231,5 +277,79 @@ export default {
   50% {
     opacity: 0.3;
   }
+}
+
+/* 技能查看样式 */
+.floor-card.skill-viewing {
+  border-color: #8e44ad;
+  box-shadow: 0 0 15px rgba(142, 68, 173, 0.4);
+  animation: skillGlow 0.5s ease-in-out;
+}
+
+@keyframes skillGlow {
+  0% {
+    box-shadow: 0 0 5px rgba(142, 68, 173, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(142, 68, 173, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(142, 68, 173, 0.4);
+  }
+}
+
+.skill-viewing-tip {
+  color: #8e44ad;
+  font-size: 0.8em;
+  margin-top: 5px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 技能模式提示 */
+.skill-tip {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(142, 68, 173, 0.9);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7em;
+  white-space: nowrap;
+  animation: skillTipPulse 1.5s infinite;
+}
+
+@keyframes skillTipPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translateX(-50%) scale(1.05);
+  }
+}
+
+.floor-card.skill-mode-active:not(.skill-viewing):not(.revealed) {
+  cursor: pointer;
+  border-style: dashed;
+  border-color: #8e44ad;
+  background-color: rgba(142, 68, 173, 0.05);
+  transition: all 0.3s;
+}
+
+.floor-card.skill-mode-active:not(.skill-viewing):not(.revealed):hover {
+  background-color: rgba(142, 68, 173, 0.15);
+  border-style: solid;
 }
 </style>

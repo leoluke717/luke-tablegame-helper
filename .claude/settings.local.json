@@ -25,7 +25,9 @@
       "WebFetch(domain:code.claude.com)",
       "WebSearch",
       "Bash(lsof:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(tree:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

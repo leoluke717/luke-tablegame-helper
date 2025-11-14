@@ -136,7 +136,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { database } from '../firebase'
-import { ref as dbRef, onValue, set, update, remove } from 'firebase/database'
+import { ref as dbRef, onValue, set, update, remove, get } from 'firebase/database'
 import QRCode from 'qrcode'
 import { gameRegistry } from '../config/games'
 
@@ -590,12 +590,25 @@ export default {
       try {
         console.log('🎮 房主开始游戏，设置房间状态为 playing...')
 
+        // 读取游戏设置
+        const roomSnapshot = await get(dbRef(database, `rooms/${roomId}`))
+        const roomData = roomSnapshot.val()
+        const gameSettings = roomData?.gameSettings || {}
+        const bigFartCount = gameSettings.bigFartCount || 1
+
+        console.log(`📊 读取游戏设置: 大屁牌数量 = ${bigFartCount}`)
+
         // 设置房间状态为 playing，其他玩家会自动跳转
         await retryOperation(() => update(dbRef(database, `rooms/${roomId}`), {
           status: 'playing',
           gameType: 'piZheXianZhi',
           currentFloor: 1,
-          fartCardsRevealedCount: 0
+          fartCardsRevealedCount: 0,
+          // 保存设置到房间根级别，方便游戏页面读取
+          settings: {
+            bigFartCount: bigFartCount,
+            smallFartCount: 4 - bigFartCount
+          }
         }))
 
         console.log('✅ 房间状态已更新为 playing，跳转到游戏页面')

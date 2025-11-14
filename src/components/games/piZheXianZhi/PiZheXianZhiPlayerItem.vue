@@ -5,9 +5,19 @@
     @click="handleClick"
   >
     <div class="player-avatar">{{ player.avatar || '😊' }}</div>
-    <div class="player-name">
-      <span class="player-sequence">({{ player.sequence || '?' }}号)</span>
-      {{ player.name }}
+    <div class="player-info">
+      <div class="player-name">
+        <span class="player-sequence">({{ player.sequence || '?' }}号)</span>
+        {{ player.name }}
+      </div>
+      <div class="player-skill-status" v-if="player.skill?.hasSkill">
+        <span v-if="!player.skill.skillUsed" class="skill-badge has-skill">
+          🔮 技能
+        </span>
+        <span v-else class="skill-badge skill-used">
+          ✅ 技能已用
+        </span>
+      </div>
     </div>
     <div class="player-status" v-if="player.status === 'out'">💀</div>
     <div class="player-status" v-else-if="!player.ready">未准备</div>
@@ -100,6 +110,37 @@ export default {
   flex: 1;
   font-weight: 500;
   color: #333;
+}
+
+.player-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.player-skill-status {
+  margin-top: 2px;
+}
+
+.skill-badge {
+  font-size: 0.75em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.skill-badge.has-skill {
+  background-color: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ff9800;
+}
+
+.skill-badge.skill-used {
+  background-color: #f5f5f5;
+  color: #757575;
+  border: 1px solid #bdbdbd;
 }
 
 .player-status {
