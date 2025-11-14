@@ -94,7 +94,7 @@
             </div>
           </div>
           <div v-if="players.length === 0" class="empty-state">
-            {{ isHost ? '等待玩家加入...' : '正在加入房间...' }}
+            {{ isHost ? '等待玩家加入...' : '等待房主开始游戏...' }}
           </div>
         </div>
       </div>
@@ -161,6 +161,7 @@ export default {
     const nameValidationMsg = ref('') // 验证消息
     const selectedGame = ref('piZheXianZhi') // 当前选择的游戏（默认"屁者先知"）
     const isInitialized = ref(false) // 玩家是否已初始化完成
+    const roomData = ref(null) // 房间数据（包含status等）
 
     let playersRef = null
     let unsubscribe = null
@@ -351,6 +352,8 @@ export default {
       playerName.value = localStorage.getItem('playerName') || ''
       let playerId = localStorage.getItem('playerId')
 
+      console.log('📝 initPlayer开始:', { playerName: playerName.value, playerId })
+
       if (!playerName.value) {
         alert('未找到玩家信息，返回首页')
         router.push('/')
@@ -362,24 +365,27 @@ export default {
         const roomPlayersRef = dbRef(database, `rooms/${roomId}/players`)
         const existingPlayerSnapshot = await retryOperation(
           () => new Promise((resolve) => {
-            const unsubscribeCheck = onValue(roomPlayersRef, (snapshot) => {
-              unsubscribeCheck()
+            onValue(roomPlayersRef, (snapshot) => {
               resolve(snapshot)
             }, { onlyOnce: true })
           })
         )
 
         const existingData = existingPlayerSnapshot.val()
+        console.log('🔍 existingData:', existingData ? Object.keys(existingData) : 'null')
 
         // 向后兼容性检查：如果localStorage中的playerId是旧格式（非browser_开头），
         // 则使用浏览器ID重新生成，确保ID格式一致性
         if (playerId && !playerId.startsWith('browser_')) {
-          if (DEBUG) console.log('🔄 检测到旧格式playerId，进行转换:', playerId)
+          console.log('🔄 检测到旧格式playerId，进行转换:', playerId)
           playerId = null // 清除旧ID，强制使用浏览器ID
         }
 
+        console.log('📋 处理前playerId:', playerId)
+
         // 检查现有玩家列表中是否已存在使用当前浏览器ID的玩家
         const browserId = getBrowserId()
+        console.log('🔑 浏览器ID:', browserId)
         let existingPlayerWithBrowserId = null
 
         if (existingData) {
@@ -390,6 +396,8 @@ export default {
             }
           }
         }
+
+        console.log('🔍 existingPlayerWithBrowserId:', existingPlayerWithBrowserId?.name || 'null')
 
         // 如果玩家ID存在且在玩家列表中，则重用
         if (playerId && existingData && existingData[playerId]) {
@@ -431,6 +439,7 @@ export default {
 
         // 关键修复：提前设置 currentPlayerId，确保在注册监听器前已设置
         currentPlayerId.value = playerId
+        console.log('✅ 设置currentPlayerId:', playerId)
         console.log('✅ currentPlayerId 设置完成:', currentPlayerId.value)
 
         // 安全检查：确保 currentPlayer 已被正确设置
@@ -439,12 +448,17 @@ export default {
           throw new Error('玩家初始化失败，请重试')
         }
 
+        console.log('🔗 开始注册监听器...')
+
         // 监听玩家列表变化
         const unsubscribePlayers = onValue(roomPlayersRef, (snapshot) => {
           const data = snapshot.val()
+          console.log('👥 玩家列表监听器触发:', data ? Object.keys(data).length : 0, '个玩家')
+          console.log('👥 玩家列表详细数据:', data)
           if (data) {
             // 为向后兼容，为没有avatar的玩家添加默认头像
             const playersArray = Object.values(data).sort((a, b) => a.joinedAt - b.joinedAt)
+            console.log('👥 玩家列表数据:', playersArray.map(p => p.name))
             players.value = playersArray.map(player => {
               if (!player.avatar) {
                 // 如果没有avatar，使用默认值
@@ -453,28 +467,37 @@ export default {
               return player
             })
           } else {
+            console.log('⚠️ 玩家列表为空')
             players.value = []
           }
         })
 
+        console.log('✅ 监听器注册完成')
+
         // 监听房间信息（房主ID等）
         roomRef = dbRef(database, `rooms/${roomId}`)
         const unsubscribeRoom = onValue(roomRef, async (snapshot) => {
-          const roomData = snapshot.val()
+          const data = snapshot.val()
+          roomData.value = data
 
-          console.log('🏠 房间监听器触发:', roomData ? '房间存在' : '房间不存在')
+          console.log('🏠 房间监听器触发:', {
+            exists: !!data,
+            hostId: data?.hostId,
+            status: data?.status,
+            playersCount: data?.players ? Object.keys(data.players).length : 0
+          })
 
-          if (roomData && roomData.hostId) {
+          if (data && data.hostId) {
             // 房间已存在，有房主
-            hostId.value = roomData.hostId
+            hostId.value = data.hostId
             checkIsHost()
 
             // 只有在玩家初始化完成后，才更新游戏选择（避免初始化过程中的干扰）
-            if (isInitialized.value && roomData.selectedGame && roomData.selectedGame !== selectedGame.value) {
-              if (DEBUG) console.log('🔄 更新游戏选择:', roomData.selectedGame)
-              selectedGame.value = roomData.selectedGame
+            if (isInitialized.value && data.selectedGame && data.selectedGame !== selectedGame.value) {
+              if (DEBUG) console.log('🔄 更新游戏选择:', data.selectedGame)
+              selectedGame.value = data.selectedGame
             }
-          } else if (roomData && !roomData.hostId) {
+          } else if (data && !data.hostId) {
             // 房间存在但无房主（如数据未初始化），当前玩家成为房主
             if (!currentPlayerId.value) {
               console.error('❌ 房间初始化失败：currentPlayerId 尚未设置')
@@ -491,7 +514,7 @@ export default {
               await retryOperation(() => update(roomRef, {
                 hostId: currentPlayerId.value,
                 createdAt: Date.now(),
-                gameStatus: 'waiting'
+                status: 'waiting'
               }))
               console.log('✅ 房间房主设置成功，hostId:', currentPlayerId.value)
             } catch (error) {
@@ -499,7 +522,7 @@ export default {
               hostId.value = null
               checkIsHost()
             }
-          } else if (!roomData) {
+          } else if (!data) {
             // 房间不存在，创建房间并设置房主
 
             // 关键修复：确保 currentPlayerId 已设置
@@ -518,7 +541,7 @@ export default {
               await retryOperation(() => update(roomRef, {
                 hostId: currentPlayerId.value,
                 createdAt: Date.now(),
-                gameStatus: 'waiting'
+                status: 'waiting'
               }))
               console.log('✅ 房间创建成功，hostId:', currentPlayerId.value)
             } catch (error) {
@@ -565,12 +588,17 @@ export default {
       }
 
       try {
-        // 设置第一个玩家为当前回合（使用重试机制）
+        console.log('🎮 房主开始游戏，设置房间状态为 playing...')
+
+        // 设置房间状态为 playing，其他玩家会自动跳转
         await retryOperation(() => update(dbRef(database, `rooms/${roomId}`), {
-          currentTurn: players.value[0].id,
-          gameStatus: 'playing'
+          status: 'playing',
+          gameType: 'piZheXianZhi',
+          currentFloor: 1,
+          fartCardsRevealedCount: 0
         }))
 
+        console.log('✅ 房间状态已更新为 playing，跳转到游戏页面')
         // 跳转到游戏页面
         router.push(`/game/${roomId}`)
       } catch (error) {
@@ -734,11 +762,71 @@ export default {
       }
     })
 
+    // 监听房间状态变化，自动跳转到游戏界面（仅非房主玩家）
+    watch(() => roomData.value, (newVal, oldVal) => {
+      if (!newVal) {
+        console.log('🔍 房间数据为空')
+        return
+      }
+
+      console.log('🔍 房间数据变化:', {
+        status: newVal.status,
+        isHost: isHost.value,
+        currentPlayerId: currentPlayerId.value,
+        hasChanged: oldVal?.status !== newVal.status
+      })
+
+      // 当房间状态从 playing 变为 waiting 时，所有玩家自动跳转到大厅
+      if (oldVal?.status === 'playing' && newVal.status === 'waiting' && currentPlayerId.value) {
+        console.log('🎮 游戏结束，所有玩家返回大厅')
+        router.push(`/lobby/${roomId}`)
+        return
+      }
+
+      // 当房间状态变为 playing 时，非房主玩家自动跳转到游戏界面
+      if (newVal.status === 'playing' && !isHost.value && currentPlayerId.value) {
+        console.log('🎮 游戏开始检测到，自动跳转到游戏界面')
+        // 使用 setTimeout 防止与房主的路由跳转冲突
+        setTimeout(() => {
+          router.push(`/game/${roomId}`)
+        }, 500)
+      }
+    }, { deep: true })
+
     onMounted(async () => {
+      console.log('🏠 LobbyView 已挂载，开始初始化...')
+
+      // 检查localStorage中的playerId
+      const storedPlayerId = localStorage.getItem('playerId')
+      console.log('🔑 从localStorage读取playerId:', storedPlayerId)
+
       await initPlayer()
 
       // 等待 DOM 更新
       await nextTick()
+
+      // 再次检查playerId和玩家列表
+      const finalPlayerId = localStorage.getItem('playerId')
+      console.log('✅ LobbyView 初始化完成', {
+        initialPlayerId: storedPlayerId,
+        finalPlayerId,
+        currentPlayerId: currentPlayerId.value,
+        playersCount: players.value.length,
+        isHost: isHost.value,
+        hostId: hostId.value,
+        playersList: players.value.map(p => ({ id: p.id, name: p.name }))
+      })
+
+      // 额外等待一段时间，确保Firebase数据完全同步
+      // 特别是在从游戏界面返回大厅时
+      setTimeout(() => {
+        const afterWait = {
+          playersCount: players.value.length,
+          playersList: players.value.map(p => ({ id: p.id, name: p.name })),
+          hostId: hostId.value
+        }
+        console.log('🔄 额外等待后检查:', afterWait)
+      }, 1000)
 
       // 等待 Canvas 准备就绪（最多重试 10 次，防止无限循环）
       let retryCount = 0
@@ -779,6 +867,7 @@ export default {
       nameValidationMsg,
       selectedGame,
       displaySelectedGame,
+      roomData,
       qrCanvas,
       copyRoomId,
       startGame,

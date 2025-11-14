@@ -20,12 +20,14 @@ const routes = [
   {
     path: '/game/:roomId',
     name: 'game',
-    component: GameView
+    component: GameView,
+    props: true
   },
   {
     path: '/game-settings/:roomId',
     name: 'game-settings',
-    component: GameSettingsView
+    component: GameSettingsView,
+    props: true
   },
   {
     path: '/test/identity',
@@ -37,11 +39,22 @@ const routes = [
     name: 'test-cards',
     component: ScenarioCardsTestView
   },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/'
+  }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
-  routes
+  history: createWebHistory('/'),
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0 }
+    }
+  }
 })
 
 export default router
