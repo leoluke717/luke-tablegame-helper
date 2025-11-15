@@ -7,10 +7,11 @@
           v-if="skill.canUseSkill.value"
           class="btn-skill"
           :class="{ 'active': skill.skillModeActive.value }"
-          @click="skill.activateSkillMode"
-          title="使用技能查看楼层牌"
+          @click="toggleSkillMode"
+          :title="skill.skillModeActive.value ? '点击取消技能模式' : '点击启用技能模式'"
         >
-          🔮 释放技能
+          <span class="skill-icon">{{ skill.skillModeActive.value ? '⏹️' : '🔮' }}</span>
+          <span class="skill-text">{{ skill.skillModeActive.value ? '取消技能' : '释放技能' }}</span>
         </button>
         <button
           v-if="isCurrentPlayerAssassin"
@@ -119,13 +120,22 @@ export default {
       skill.useSkillOnFloor(floor)
     }
 
+    const toggleSkillMode = () => {
+      if (skill.skillModeActive.value) {
+        skill.exitSkillMode()
+      } else {
+        skill.activateSkillMode()
+      }
+    }
+
     return {
       skill,
       sortedFloors,
       getCard,
       isBigFartCard,
       handleCardClick,
-      handleSkillUse
+      handleSkillUse,
+      toggleSkillMode
     }
   }
 }
@@ -157,28 +167,60 @@ export default {
 }
 
 .btn-skill {
-  padding: 8px 12px;
-  border: 2px solid #8e44ad;
+  padding: 5px 10px;
+  border: 2px solid #bdc3c7;
   background-color: #fff;
   border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
-  font-size: 0.95em;
-  transition: all 0.3s;
+  font-weight: 500;
+  font-size: 0.85em;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  color: #7f8c8d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .btn-skill:hover {
-  background-color: #8e44ad;
-  color: #fff;
+  border-color: #8e44ad;
+  background-color: #f8f9fa;
+  color: #8e44ad;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(142, 68, 173, 0.2);
 }
 
 .btn-skill.active {
-  background-color: #8e44ad;
+  background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+  border-color: #8e44ad;
   color: #fff;
-  box-shadow: 0 0 10px rgba(142, 68, 173, 0.3);
+  box-shadow: 0 0 12px rgba(142, 68, 173, 0.4), 0 2px 8px rgba(0, 0, 0, 0.15);
+  animation: skillActivePulse 2s infinite;
+}
+
+.btn-skill.active:hover {
+  background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+  box-shadow: 0 0 15px rgba(142, 68, 173, 0.5), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.skill-icon {
+  font-size: 1em;
+  display: flex;
+  align-items: center;
+}
+
+.skill-text {
+  font-size: 0.9em;
+  letter-spacing: 0.5px;
+}
+
+@keyframes skillActivePulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(142, 68, 173, 0.4), 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(142, 68, 173, 0.6), 0 2px 10px rgba(0, 0, 0, 0.2);
+  }
 }
 
 .btn-eye-small {

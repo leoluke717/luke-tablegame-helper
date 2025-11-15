@@ -46,11 +46,6 @@ export function useSkill(gameLogic, playerId, roomId) {
     if (!canUseSkill.value) return;
 
     skillModeActive.value = true;
-
-    // 延迟一小段时间后自动退出模式，避免重复触发
-    setTimeout(() => {
-      skillModeActive.value = false;
-    }, 5000);
   };
 
   // 退出技能模式
